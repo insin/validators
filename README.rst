@@ -86,8 +86,8 @@ Creates a validator which validates that input looks like a valid URL.
 Creates a validator which validates that input looks like a valid e-mail
 address.
 
-``validateEmail(value)``
-------------------------
+``validateURL(value)``
+----------------------
 
 Validates that input looks like a valid URL -- this is a preconfigured instance
 of a ``URLValidator``,
