@@ -1,0 +1,24 @@
+{
+  "name": "validators"
+, "description": "Reusable validators for browsers and Node.js"
+, "version": "0.0.1"
+, "author": "Jonathan Buchanan <jonathan.buchanan@gmail.com> (https://github.com/insin)"
+, "tags": ["dualsided", "validation", "ipv6"]
+, "main": "./lib/validators"
+, "repository": {
+    "type": "git"
+,   "url": "http://github.com/insin/validators.git"
+  }
+, "dependencies": {
+    "Concur": "0.2.x"
+  , "isomorph": ">=0.1.9"
+  , "punycode": "1.0.x"
+  }
+, "devDependencies": {
+    "qqunit": "0.1.x"
+  , "buildumb": "0.1.x"
+  }
+, "scripts": {
+    "test": "node tests/tests.js"
+  }
+}
