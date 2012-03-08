@@ -1,6 +1,6 @@
 QUnit.module("validators")
 
-QUnit.test("validators", 99, function() {
+QUnit.test("validators", 100, function() {
   var now = new Date(90000)
   var later = new Date(100000)
   var earlier = new Date(80000)
@@ -93,6 +93,7 @@ QUnit.test("validators", 99, function() {
   , [validators.validateURL, "http://valid-----hyphens.com/", null]
   , [validators.validateURL, "http://example.com?something=value", null]
   , [validators.validateURL, "http://example.com/index.php?something=value&another=value2", null]
+  , [validators.validateURL, "http://עברית.idn.icann.org/", null]
 
   , [validators.validateURL, "foo", validators.ValidationError]
   , [validators.validateURL, "http://", validators.ValidationError]

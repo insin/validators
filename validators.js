@@ -1,5 +1,5 @@
 /**
- * validators 0.0.1 - https://github.com/insin/validators
+ * validators 0.0.2 - https://github.com/insin/validators
  * MIT Licensed
  */
 ;(function() {
@@ -1371,8 +1371,8 @@ var URLValidator = RegexValidator.extend({
       catch (ue) {
         throw e
       }
-      var url = url.makeUri(urlFields)
-      RegexValidator.prototype.__call__.call(this, url)
+      value = url.makeUri(urlFields)
+      RegexValidator.prototype.__call__.call(this, value)
     }
   }
 })

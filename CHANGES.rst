@@ -1,3 +1,8 @@
+0.0.2 / 2012-03-08
+==================
+
+* Fixed overwriting of url module variable after validating an IDNA domain
+
 0.0.1 / 2012-03-08
 ==================
 
