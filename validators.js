@@ -1406,6 +1406,9 @@ var EmailValidator = RegexValidator.extend({
   }
 })
 
+/** Validates that input looks like a valid URL. */
+var validateURL = URLValidator()
+
 /** Validates that input looks like a valid e-mail address. */
 var validateEmail =
     EmailValidator(EMAIL_RE,
@@ -1558,6 +1561,7 @@ module.exports = {
 , RegexValidator: RegexValidator
 , URLValidator: URLValidator
 , EmailValidator: EmailValidator
+, validateURL: validateURL
 , validateEmail: validateEmail
 , validateSlug: validateSlug
 , validateIPv4Address: validateIPv4Address

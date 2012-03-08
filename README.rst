@@ -24,8 +24,8 @@ Node.js::
 .. _`Node.js`: http://nodejs.org
 .. _`validators.js`: https://raw.github.com/insin/validators/master/validators.js
 
-API
-===
+Error
+=====
 
 ``ValidationError(messages[, {code: null, params: null}])``
 -----------------------------------------------------------
@@ -36,18 +36,8 @@ For customisation purposes, in addition to a validation message, a
 ValidationError may specify a ``code`` to itentify the category of error and any
 ``params`` which were inserted into the validation message, when applicable.
 
-``isCallable(obj)``
--------------------
-
-Returns ``true`` if the given object is a Function or an Object with a
-``__call__()`` Function.
-
-``callValidator(validator, value)``
------------------------------------
-
-Calls a validator with a value - this utility function is provided to ensure
-code which needs to work with validators doesn't need to care how they're
-defined.
+Utilities
+=========
 
 ``EMPTY_VALUES``
 ----------------
@@ -64,25 +54,49 @@ Defines input values for which a field is considered to be empty. These are:
 Convenience function for checking if a value is strictly one of
 ``EMPTY_VALUES``.
 
+``isCallable(obj)``
+-------------------
+
+Returns ``true`` if the given object is a Function or an Object with a
+``__call__()`` Function.
+
+``callValidator(validator, value)``
+-----------------------------------
+
+Calls a validator with a value - this utility function is provided to ensure
+code which needs to work with validators doesn't need to care how they're
+defined.
+
+Validators
+==========
+
 ``RegexValidator(regex, message, code)``
 ----------------------------------------
 
-Validates that input matches a regular expression.
+Creates a validator which walidates that input matches a regular expression.
 
-``URLValidator([kwargs])``
+``URLValidator()``
 --------------------------
 
-Validates that input looks like a valid URL.
+Creates a validator which validates that input looks like a valid URL.
 
 ``EmailValidator(regex, message, code)``
 ----------------------------------------
 
-Validates that input looks like a valid e-mail address
+Creates a validator which validates that input looks like a valid e-mail
+address.
 
 ``validateEmail(value)``
 ------------------------
 
-Validates that input looks like a valid e-mail address.
+Validates that input looks like a valid URL -- this is a preconfigured instance
+of a ``URLValidator``,
+
+``validateEmail(value)``
+------------------------
+
+Validates that input looks like a valid e-mail address -- this is a
+preconfigured instance of an ``EmailValidator``,
 
 ``validateSlug(value)``
 -----------------------
@@ -110,8 +124,8 @@ Validates that input is a valid IPv4 or IPv6 address.
 Returns the appropriate validator for validating IPv4 or IPv6 addresses, passing
 ``'ipv4'``, ``'ipv6'``, or ``'both'`` as ``protocol``.
 
-If a truthy ``unpackIPv4`` argument is given and ``protocol`` is not ``'both``',
-an Error will be thrown.
+If a truthy ``unpackIPv4`` argument is given and ``protocol`` is not ``'both'``,
+an ``Error`` will be thrown.
 
 ``validateCommaSeparatedIntegerList(value)``
 --------------------------------------------
@@ -121,7 +135,7 @@ Validates that input is a comma-separated list of integers.
 ``BaseValidator(limitValue)``
 -----------------------------
 
-Base for validators which compare input against a given value.
+Base constructor for validators which compare input against a given value.
 
 ``MaxValueValidator(limitValue)``
 ---------------------------------
