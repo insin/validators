@@ -8,10 +8,10 @@ buildumb.build({
   // punycode
     'node_modules/punycode/punycode.js': 'punycode'
   // isomorph
-  , 'node_modules/isomorph/lib/is.js'     : 'isomorph/lib/is'
-  , 'node_modules/isomorph/lib/format.js' : 'isomorph/lib/format'
-  , 'node_modules/isomorph/lib/object.js' : 'isomorph/lib/object'
-  , 'node_modules/isomorph/lib/url.js'    : 'isomorph/lib/url'
+  , 'node_modules/isomorph/is.js'     : 'isomorph/is'
+  , 'node_modules/isomorph/format.js' : 'isomorph/format'
+  , 'node_modules/isomorph/object.js' : 'isomorph/object'
+  , 'node_modules/isomorph/url.js'    : 'isomorph/url'
   // Concur
   , 'node_modules/Concur/lib/concur.js': 'Concur'
   // validators

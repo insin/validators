@@ -2,3 +2,5 @@ support
 tests
 .gitignore
 .travis.yml
+/validators.js
+/validators.min.js

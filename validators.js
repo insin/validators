@@ -1,5 +1,5 @@
 /**
- * validators 0.0.2 - https://github.com/insin/validators
+ * validators 0.0.3 - https://github.com/insin/validators
  * MIT Licensed
  */
 ;(function() {
@@ -23,12 +23,7 @@
   }
 
 require.define("punycode", function(module, exports, require) {
-/*!
- * Punycode.js <http://mths.be/punycode>
- * Copyright 2011 Mathias Bynens <http://mathiasbynens.be/>
- * Available under MIT license <http://mths.be/mit>
- */
-
+/*! http://mths.be/punycode by @mathias */
 ;(function(root) {
 
 	/**
@@ -310,7 +305,7 @@ require.define("punycode", function(module, exports, require) {
 				}
 
 				i += digit * w;
-				t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+				t = k <= bias ? tMin : (k >= bias + tMax ? tMax : k - bias);
 
 				if (digit < t) {
 					break;
@@ -433,7 +428,7 @@ require.define("punycode", function(module, exports, require) {
 				if (currentValue == n) {
 					// Represent delta as a generalized variable-length integer
 					for (q = delta, k = base; /* no condition */; k += base) {
-						t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+						t = k <= bias ? tMin : (k >= bias + tMax ? tMax : k - bias);
 						if (q < t) {
 							break;
 						}
@@ -541,7 +536,7 @@ require.define("punycode", function(module, exports, require) {
 
 }(this));})
 
-require.define("isomorph/lib/is", function(module, exports, require) {
+require.define("isomorph/is", function(module, exports, require) {
 var toString = Object.prototype.toString
 
 // Type checks
@@ -606,7 +601,7 @@ module.exports = {
 }
 })
 
-require.define("isomorph/lib/format", function(module, exports, require) {
+require.define("isomorph/format", function(module, exports, require) {
 var is = require('./is')
   , slice = Array.prototype.slice
   , formatRegExp = /%[%s]/g
@@ -634,14 +629,36 @@ function formatObj(s, o) {
   return s.replace(formatObjRegExp, function(m, b, p) { return b.length == 2 ? m.slice(1) : o[p] })
 }
 
+var units = 'kMGTPEZY'
+  , stripDecimals = /\.00$|0$/
+
+/**
+ * Formats bytes as a file size with the appropriately scaled units.
+ */
+function fileSize(bytes, threshold) {
+  threshold = Math.min(threshold || 768, 1024)
+  var i = -1
+    , unit = 'bytes'
+    , size = bytes
+  while (size > threshold && i < units.length) {
+    size = size / 1024
+    i++
+  }
+  if (i > -1) {
+    unit = units.charAt(i) + 'B'
+  }
+  return size.toFixed(2).replace(stripDecimals, '') + ' ' + unit
+}
+
 module.exports = {
   format: format
 , formatArr: formatArr
 , formatObj: formatObj
+, fileSize: fileSize
 }
 })
 
-require.define("isomorph/lib/object", function(module, exports, require) {
+require.define("isomorph/object", function(module, exports, require) {
 /**
  * Callbound version of Object.prototype.hasOwnProperty(), ready to be called
  * with an object and property name.
@@ -735,7 +752,7 @@ module.exports = {
 }
 })
 
-require.define("isomorph/lib/url", function(module, exports, require) {
+require.define("isomorph/url", function(module, exports, require) {
 // parseUri 1.2.2
 // (c) Steven Levithan <stevenlevithan.com>
 // MIT License
@@ -826,8 +843,8 @@ module.exports = {
 })
 
 require.define("Concur", function(module, exports, require) {
-var is = require('isomorph/lib/is')
-  , object = require('isomorph/lib/object')
+var is = require('isomorph/is')
+  , object = require('isomorph/object')
 
 /**
  * Mixes in properties from one object to another. If the source object is a
@@ -938,8 +955,8 @@ Concur.extend = function(prototypeProps, constructorProps) {
 
 require.define("./errors", function(module, exports, require) {
 var Concur = require('Concur')
-  , is = require('isomorph/lib/is')
-  , object = require('isomorph/lib/object')
+  , is = require('isomorph/is')
+  , object = require('isomorph/object')
 
 /**
  * A validation error, containing a list of messages. Single messages
@@ -971,7 +988,7 @@ module.exports = {
 })
 
 require.define("./ipv6", function(module, exports, require) {
-var object = require('isomorph/lib/object')
+var object = require('isomorph/object')
 
 var errors = require('./errors')
 
@@ -1255,10 +1272,10 @@ module.exports = {
 
 require.define(["./validators","validators"], function(module, exports, require) {
 var Concur = require('Concur')
-  , is = require('isomorph/lib/is')
-  , format = require('isomorph/lib/format').formatObj
+  , is = require('isomorph/is')
+  , format = require('isomorph/format').formatObj
   , punycode = require('punycode')
-  , url = require('isomorph/lib/url')
+  , url = require('isomorph/url')
 
 var errors = require('./errors')
   , ipv6 = require('./ipv6')
