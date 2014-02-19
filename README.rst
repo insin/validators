@@ -74,7 +74,7 @@ Validators
 ``RegexValidator(options)``
 ---------------------------
 
-Creates a validator which walidates that input matches a regular expression.
+Creates a validator which validates that input matches a regular expression.
 
 Options which can be passed are:
 
