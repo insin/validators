@@ -1,5 +1,5 @@
-0.1.0
-=====
+0.1.0 / 2014-02-19
+==================
 
 * **Backwards-incompatible change** -- RegexValidator and EmailValidator now
   take a configuration object as their only argument, rather than individual

@@ -1,30 +1,819 @@
 /**
- * validators 0.0.3 - https://github.com/insin/validators
+ * validators 0.1.0 - https://github.com/insin/validators
  * MIT Licensed
  */
-;(function() {
-  var modules = {}
-  function require(name) {
-    return modules[name]
-  }
-  require.define = function(rs, fn) {
-    var module = {}
-      , exports = {}
-    module.exports = exports
-    fn(module, exports, require)
-    if (Object.prototype.toString.call(rs) == '[object Array]') {
-      for (var i = 0, l = rs.length; i < l; i++) {
-        modules[rs[i]] = module.exports
-      }
+!function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+'use strict';
+
+var Concur = require('Concur')
+  , is = require('isomorph/is')
+  , object = require('isomorph/object')
+
+/**
+ * A validation error, containing a list of messages. Single messages
+ * (e.g. those produced by validators may have an associated error code
+ * and parameters to allow customisation by fields.
+ */
+var ValidationError = Concur.extend({
+  constructor: function(message, kwargs) {
+    if (!(this instanceof ValidationError)) { return new ValidationError(message, kwargs) }
+    kwargs = object.extend({code: null, params: null}, kwargs)
+    if (is.Array(message)) {
+      this.messages = message
     }
     else {
-      modules[rs] = module.exports
+      this.code = kwargs.code
+      this.params = kwargs.params
+      this.messages = [message]
+    }
+  }
+})
+
+ValidationError.prototype.toString = function() {
+  return ('ValidationError: ' + this.messages.join('; '))
+}
+
+module.exports = {
+  ValidationError: ValidationError
+}
+
+},{"Concur":4,"isomorph/is":7,"isomorph/object":8}],2:[function(require,module,exports){
+'use strict';
+
+var object = require('isomorph/object')
+
+var errors = require('./errors')
+
+var ValidationError = errors.ValidationError
+
+var hexRE = /^[0-9a-f]+$/
+
+/**
+ * Cleans a IPv6 address string.
+ *
+ *  Validity is checked by calling isValidIPv6Address() - if an invalid address
+ *  is passed, a ValidationError is thrown.
+ *
+ * Replaces the longest continious zero-sequence with '::' and removes leading
+ * zeroes and makes sure all hextets are lowercase.
+ */
+function cleanIPv6Address(ipStr, kwargs) {
+  kwargs = object.extend({
+    unpackIPv4: false, errorMessage: 'This is not a valid IPv6 address'
+  }, kwargs)
+
+  var bestDoublecolonStart = -1
+    , bestDoublecolonLen = 0
+    , doublecolonStart = -1
+    , doublecolonLen = 0
+
+  if (!isValidIPv6Address(ipStr)) {
+    throw ValidationError(kwargs.errorMessage)
+  }
+
+  // This algorithm can only handle fully exploded IP strings
+  ipStr = _explodeShorthandIPstring(ipStr)
+  ipStr = _sanitiseIPv4Mapping(ipStr)
+
+  // If needed, unpack the IPv4 and return straight away
+  if (kwargs.unpackIPv4) {
+    var ipv4Unpacked = _unpackIPv4(ipStr)
+    if (ipv4Unpacked) {
+      return ipv4Unpacked
     }
   }
 
-require.define("punycode", function(module, exports, require) {
-/*! http://mths.be/punycode by @mathias */
+  var hextets = ipStr.split(':')
+
+  for (var i = 0, l = hextets.length; i < l; i++) {
+    // Remove leading zeroes
+    hextets[i] = hextets[i].replace(/^0+/, '')
+    if (hextets[i] === '') {
+      hextets[i] = '0'
+    }
+
+    // Determine best hextet to compress
+    if (hextets[i] == '0') {
+      doublecolonLen += 1
+      if (doublecolonStart == -1) {
+        // Start a sequence of zeros
+        doublecolonStart = i
+      }
+      if (doublecolonLen > bestDoublecolonLen) {
+        // This is the longest sequence so far
+        bestDoublecolonLen = doublecolonLen
+        bestDoublecolonStart = doublecolonStart
+      }
+    }
+    else {
+      doublecolonLen = 0
+      doublecolonStart = -1
+    }
+  }
+
+  // Compress the most suitable hextet
+  if (bestDoublecolonLen > 1) {
+    var bestDoublecolonEnd = bestDoublecolonStart + bestDoublecolonLen
+    // For zeros at the end of the address
+    if (bestDoublecolonEnd == hextets.length) {
+      hextets.push('')
+    }
+    hextets.splice(bestDoublecolonStart, bestDoublecolonLen, '')
+    // For zeros at the beginning of the address
+    if (bestDoublecolonStart === 0) {
+      hextets.unshift('')
+    }
+  }
+
+  return hextets.join(':').toLowerCase()
+}
+
+/**
+ * Sanitises IPv4 mapping in a expanded IPv6 address.
+ *
+ * This converts ::ffff:0a0a:0a0a to ::ffff:10.10.10.10.
+ * If there is nothing to sanitise, returns an unchanged string.
+ */
+function _sanitiseIPv4Mapping(ipStr) {
+  if (ipStr.toLowerCase().indexOf('0000:0000:0000:0000:0000:ffff:') !== 0) {
+    // Not an ipv4 mapping
+    return ipStr
+  }
+
+  var hextets = ipStr.split(':')
+
+  if (hextets[hextets.length - 1].indexOf('.') != -1) {
+    // Already sanitized
+    return ipStr
+  }
+
+  var ipv4Address = [
+    parseInt(hextets[6].substring(0, 2), 16)
+  , parseInt(hextets[6].substring(2, 4), 16)
+  , parseInt(hextets[7].substring(0, 2), 16)
+  , parseInt(hextets[7].substring(2, 4), 16)
+  ].join('.')
+
+  return hextets.slice(0, 6).join(':') +  ':' + ipv4Address
+}
+
+/**
+ * Unpacks an IPv4 address that was mapped in a compressed IPv6 address.
+ *
+ * This converts 0000:0000:0000:0000:0000:ffff:10.10.10.10 to 10.10.10.10.
+ * If there is nothing to sanitize, returns null.
+ */
+function _unpackIPv4(ipStr) {
+  if (ipStr.toLowerCase().indexOf('0000:0000:0000:0000:0000:ffff:') !== 0) {
+    return null
+  }
+
+  var hextets = ipStr.split(':')
+  return hextets.pop()
+}
+
+/**
+ * Determines if we have a valid IPv6 address.
+ */
+function isValidIPv6Address(ipStr) {
+  var validateIPv4Address = require('./validators').validateIPv4Address
+
+  // We need to have at least one ':'
+  if (ipStr.indexOf(':') == -1) {
+    return false
+  }
+
+  // We can only have one '::' shortener
+  if (String_count(ipStr, '::') > 1) {
+    return false
+  }
+
+  // '::' should be encompassed by start, digits or end
+  if (ipStr.indexOf(':::') != -1) {
+    return false
+  }
+
+  // A single colon can neither start nor end an address
+  if ((ipStr.charAt(0) == ':' && ipStr.charAt(1) != ':') ||
+      (ipStr.charAt(ipStr.length - 1) == ':' &&
+       ipStr.charAt(ipStr.length - 2) != ':')) {
+    return false
+  }
+
+  // We can never have more than 7 ':' (1::2:3:4:5:6:7:8 is invalid)
+  if (String_count(ipStr, ':') > 7) {
+    return false
+  }
+
+  // If we have no concatenation, we need to have 8 fields with 7 ':'
+  if (ipStr.indexOf('::') == -1 && String_count(ipStr, ':') != 7) {
+    // We might have an IPv4 mapped address
+    if (String_count(ipStr, '.') != 3) {
+      return false
+    }
+  }
+
+  ipStr = _explodeShorthandIPstring(ipStr)
+
+  // Now that we have that all squared away, let's check that each of the
+  // hextets are between 0x0 and 0xFFFF.
+  var hextets = ipStr.split(':')
+  for (var i = 0, l = hextets.length, hextet; i < l; i++) {
+    hextet = hextets[i]
+    if (String_count(hextet, '.') == 3) {
+      // If we have an IPv4 mapped address, the IPv4 portion has to
+      // be at the end of the IPv6 portion.
+      if (ipStr.split(':').pop() != hextet) {
+        return false
+      }
+      try {
+        validateIPv4Address.__call__(hextet)
+      }
+      catch (e) {
+        if (!(e instanceof ValidationError)) {
+          throw e
+        }
+        return false
+      }
+    }
+    else {
+      if (!hexRE.test(hextet)) {
+        return false
+      }
+      var intValue = parseInt(hextet, 16)
+      if (isNaN(intValue) || intValue < 0x0 || intValue > 0xFFFF) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+/**
+ * Expands a shortened IPv6 address.
+ */
+function _explodeShorthandIPstring(ipStr) {
+  if (!_isShortHand(ipStr)) {
+    // We've already got a longhand ipStr
+    return ipStr
+  }
+
+  var newIp = []
+    , hextets = ipStr.split('::')
+
+  // If there is a ::, we need to expand it with zeroes to get to 8 hextets -
+  // unless there is a dot in the last hextet, meaning we're doing v4-mapping
+  var fillTo = (ipStr.split(':').pop().indexOf('.') != -1) ? 7 : 8
+
+  if (hextets.length > 1) {
+    var sep = hextets[0].split(':').length + hextets[1].split(':').length
+    newIp = hextets[0].split(':')
+    for (var i = 0, l = fillTo - sep; i < l; i++) {
+      newIp.push('0000')
+    }
+    newIp = newIp.concat(hextets[1].split(':'))
+  }
+  else {
+    newIp = ipStr.split(':')
+  }
+
+  // Now need to make sure every hextet is 4 lower case characters.
+  // If a hextet is < 4 characters, we've got missing leading 0's.
+  var retIp = []
+  for (i = 0, l = newIp.length; i < l; i++) {
+    retIp.push(zeroPadding(newIp[i], 4) + newIp[i].toLowerCase())
+  }
+  return retIp.join(':')
+}
+
+/**
+ * Determines if the address is shortened.
+ */
+function _isShortHand(ipStr) {
+  if (String_count(ipStr, '::') == 1) {
+    return true
+  }
+  var parts = ipStr.split(':')
+  for (var i = 0, l = parts.length; i < l; i++) {
+    if (parts[i].length < 4) {
+      return true
+    }
+  }
+  return false
+}
+
+// Utilities
+
+function zeroPadding(str, length) {
+  if (str.length >= length) {
+    return ''
+  }
+  return new Array(length - str.length + 1).join('0')
+}
+
+function String_count(str, subStr) {
+  return str.split(subStr).length - 1
+}
+
+module.exports = {
+  cleanIPv6Address: cleanIPv6Address
+, isValidIPv6Address: isValidIPv6Address
+}
+
+},{"./errors":1,"./validators":3,"isomorph/object":8}],3:[function(require,module,exports){
+'use strict';
+
+var Concur = require('Concur')
+  , is = require('isomorph/is')
+  , format = require('isomorph/format').formatObj
+  , object = require('isomorph/object')
+  , punycode = require('punycode')
+  , url = require('isomorph/url')
+
+var errors = require('./errors')
+  , ipv6 = require('./ipv6')
+
+var ValidationError = errors.ValidationError
+  , isValidIPv6Address = ipv6.isValidIPv6Address
+
+var EMPTY_VALUES = [null, undefined, '']
+
+var isEmptyValue = function(value) {
+  for (var i = 0, l = EMPTY_VALUES.length; i < l; i++) {
+    if (value === EMPTY_VALUES[i]) {
+      return true
+    }
+  }
+  return false
+}
+
+function isCallable(o) {
+  return (is.Function(o) || is.Function(o.__call__))
+}
+
+/**
+ * Calls a validator, which may be a function or an objects with a
+ * __call__ method, with the given value.
+ */
+function callValidator(v, value) {
+  if (is.Function(v)) {
+    v(value)
+  }
+  else if (is.Function(v.__call__)) {
+    v.__call__(value)
+  }
+}
+
+function String_rsplit(str, sep, maxsplit) {
+  var split = str.split(sep)
+  return maxsplit ? [split.slice(0, -maxsplit).join(sep)].concat(split.slice(-maxsplit)) : split
+}
+
+/**
+ * Validates that input matches a regular expression.
+ */
+var RegexValidator = Concur.extend({
+  constructor: function(kwargs) {
+    if (!(this instanceof RegexValidator)) { return new RegexValidator(kwargs) }
+    kwargs = object.extend({
+      regex: null, message: null, code: null, inverseMatch: null
+    }, kwargs)
+    if (kwargs.regex) {
+      this.regex = kwargs.regex
+    }
+    if (kwargs.message) {
+      this.message =kwargs.message
+    }
+    if (kwargs.code) {
+      this.code = kwargs.code
+    }
+    if (kwargs.inverseMatch) {
+      this.inverseMatch = kwargs.inverseMatch
+    }
+    // Compile the regex if it was not passed pre-compiled
+    if (is.String(this.regex)) {
+      this.regex = new RegExp(this.regex)
+    }
+  }
+, regex: ''
+, message: 'Enter a valid value.'
+, code: 'invalid'
+, inverseMatch: false
+, __call__: function(value) {
+    if (this.inverseMatch === this.regex.test(''+value)) {
+      throw ValidationError(this.message, {code: this.code})
+    }
+  }
+})
+
+/**
+ * Validates that input looks like a valid URL.
+ */
+var URLValidator = RegexValidator.extend({
+  regex: new RegExp(
+    '^(?:[a-z0-9\\.\\-]*)://'                         // schema is validated separately
+  + '(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+(?:[A-Z]{2,6}\\.?|[A-Z0-9-]{2,}\\.?)|' // Domain...
+  + 'localhost|'                                      // localhost...
+  + '\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|'      // ...or IPv4
+  + '\\[?[A-F0-9]*:[A-F0-9:]+\\]?)'                   // ...or IPv6
+  + '(?::\\d+)?'                                      // Optional port
+  + '(?:/?|[/?]\\S+)$'
+  , 'i'
+  )
+, message: 'Enter a valid URL.'
+, schemes: ['http', 'https', 'ftp', 'ftps']
+
+, constructor:function(kwargs) {
+    if (!(this instanceof URLValidator)) { return new URLValidator(kwargs) }
+    kwargs = object.extend({schemes: null}, kwargs)
+    RegexValidator.call(this, kwargs)
+    if (kwargs.schemes !== null) {
+      this.schemes = kwargs.schemes
+    }
+  }
+
+, __call__: function(value) {
+    value = ''+value
+    // Check if the scheme is valid first
+    var scheme = value.split('://')[0].toLowerCase()
+    if (this.schemes.indexOf(scheme) === -1) {
+      throw ValidationError(this.message, {code: this.code})
+    }
+
+    // Check the full URL
+    try {
+      RegexValidator.prototype.__call__.call(this, value)
+    }
+    catch (e) {
+      if (!(e instanceof ValidationError)) { throw e }
+
+      // Trivial case failed - try for possible IDN domain
+      var urlFields = url.parseUri(value)
+      try {
+        urlFields.host = punycode.toASCII(urlFields.host)
+      }
+      catch (unicodeError) {
+        throw e
+      }
+      value = url.makeUri(urlFields)
+      RegexValidator.prototype.__call__.call(this, value)
+    }
+  }
+})
+
+/** Validates that input looks like a valid e-mail address. */
+var EmailValidator = Concur.extend({
+  message: 'Enter a valid email address.'
+, code: 'invalid'
+, userRegex: new RegExp(
+    "(^[-!#$%&'*+/=?^_`{}|~0-9A-Z]+(\\.[-!#$%&'*+/=?^_`{}|~0-9A-Z]+)*$"                                 // Dot-atom
+  + '|^"([\\001-\\010\\013\\014\\016-\\037!#-\\[\\]-\\177]|\\\\[\\001-\\011\\013\\014\\016-\\177])*"$)' // Quoted-string
+  , 'i')
+, domainRegex: new RegExp(
+    '^(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+(?:[A-Z]{2,6}|[A-Z0-9-]{2,})$'          // Domain
+  + '|^\\[(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)){3}\\]$' // Literal form, ipv4 address (SMTP 4.1.3)
+  , 'i')
+, domainWhitelist: ['localhost']
+
+, constructor: function(kwargs) {
+    if (!(this instanceof EmailValidator)) { return new EmailValidator(kwargs) }
+    kwargs = object.extend({message: null, code: null, whitelist: null}, kwargs)
+    if (kwargs.message !== null) {
+      this.message = kwargs.message
+    }
+    if (kwargs.code !== null) {
+      this.code = kwargs.code
+    }
+    if (kwargs.whitelist !== null) {
+      this.domainWhitelist = kwargs.whitelist
+    }
+  }
+
+, __call__ : function(value) {
+    value = ''+value
+
+    if (!value || value.indexOf('@') == -1) {
+      throw ValidationError(this.message, {code: this.code})
+    }
+
+    var parts = String_rsplit(value, '@', 1)
+    var userPart = parts[0]
+    var domainPart = parts[1]
+
+    if (!this.userRegex.test(userPart)) {
+      throw ValidationError(this.message, {code: this.code})
+    }
+
+    if (this.domainWhitelist.indexOf(domainPart) == -1 &&
+        !this.domainRegex.test(domainPart)) {
+      // Try for possible IDN domain-part
+      try {
+        domainPart = punycode.toASCII(domainPart)
+        if (this.domainRegex.test(domainPart)) {
+          return
+        }
+      }
+      catch (unicodeError) {
+        // Pass through to throw the ValidationError
+      }
+      throw ValidationError(this.message, {code: this.code})
+    }
+  }
+})
+
+var validateEmail = EmailValidator()
+
+var SLUG_RE = /^[-\w]+$/
+/** Validates that input is a valid slug. */
+var validateSlug = RegexValidator({
+  regex: SLUG_RE
+, message: 'Enter a valid "slug" consisting of letters, numbers, underscores or hyphens.'
+, code: 'invalid'
+})
+
+var IPV4_RE = /^(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}$/
+/** Validates that input is a valid IPv4 address. */
+var validateIPv4Address = RegexValidator({
+  regex: IPV4_RE
+, message: 'Enter a valid IPv4 address.'
+, code: 'invalid'
+})
+
+/** Validates that input is a valid IPv6 address. */
+function validateIPv6Address(value) {
+  if (!isValidIPv6Address(value)) {
+    throw ValidationError('Enter a valid IPv6 address.', {code: 'invalid'})
+  }
+}
+
+/** Validates that input is a valid IPv4 or IPv6 address. */
+function validateIPv46Address(value) {
+  try {
+    validateIPv4Address.__call__(value)
+  }
+  catch (e) {
+    if (!(e instanceof ValidationError)) {
+      throw e
+    }
+
+    if (!isValidIPv6Address(value)) {
+      throw ValidationError('Enter a valid IPv4 or IPv6 address.', {code: 'invalid'})
+    }
+  }
+}
+
+var ipAddressValidatorLookup = {
+  both: {validators: [validateIPv46Address], message: 'Enter a valid IPv4 or IPv6 address.'}
+, ipv4: {validators: [validateIPv4Address], message: 'Enter a valid IPv4 address.'}
+, ipv6: {validators: [validateIPv6Address], message: 'Enter a valid IPv6 address.'}
+}
+
+/**
+ * Depending on the given parameters returns the appropriate validators for
+ * a GenericIPAddressField.
+ */
+function ipAddressValidators(protocol, unpackIPv4) {
+  if (protocol != 'both' && unpackIPv4) {
+    throw new Error('You can only use unpackIPv4 if protocol is set to "both"')
+  }
+  protocol = protocol.toLowerCase()
+  if (typeof ipAddressValidatorLookup[protocol] == 'undefined') {
+    throw new Error('The protocol "' + protocol +'" is unknown')
+  }
+  return ipAddressValidatorLookup[protocol]
+}
+
+var COMMA_SEPARATED_INT_LIST_RE = /^[\d,]+$/
+/** Validates that input is a comma-separated list of integers. */
+var validateCommaSeparatedIntegerList = RegexValidator({
+  regex: COMMA_SEPARATED_INT_LIST_RE
+, message: 'Enter only digits separated by commas.'
+, code: 'invalid'
+})
+
+/**
+ * Base for validators which compare input against a given value.
+ */
+var BaseValidator = Concur.extend({
+  constructor: function(limitValue) {
+    if (!(this instanceof BaseValidator)) { return new BaseValidator(limitValue) }
+    this.limitValue = limitValue
+  }
+, compare: function(a, b) { return a !== b }
+, clean: function(x) { return x }
+, message: 'Ensure this value is {limitValue} (it is {showValue}).'
+, code: 'limitValue'
+, __call__: function(value) {
+    var cleaned = this.clean(value)
+      , params = {limitValue: this.limitValue, showValue: cleaned}
+    if (this.compare(cleaned, this.limitValue)) {
+      throw ValidationError(format(this.message, params),
+                            {code: this.code, params: params})
+    }
+  }
+})
+
+/**
+ * Validates that input is less than or equal to a given value.
+ */
+var MaxValueValidator = BaseValidator.extend({
+  constructor: function(limitValue) {
+    if (!(this instanceof MaxValueValidator)) { return new MaxValueValidator(limitValue) }
+    BaseValidator.call(this, limitValue)
+  }
+, compare: function(a, b) { return a > b }
+, message: 'Ensure this value is less than or equal to {limitValue}.'
+, code: 'maxValue'
+})
+
+/**
+ * Validates that input is greater than or equal to a given value.
+ */
+var MinValueValidator = BaseValidator.extend({
+  constructor: function(limitValue) {
+    if (!(this instanceof MinValueValidator)) { return new MinValueValidator(limitValue) }
+    BaseValidator.call(this, limitValue)
+  }
+, compare: function(a, b) { return a < b }
+, message: 'Ensure this value is greater than or equal to {limitValue}.'
+, code: 'minValue'
+})
+
+/**
+ * Validates that input is at least a given length.
+ */
+var MinLengthValidator = BaseValidator.extend({
+  constructor: function(limitValue) {
+    if (!(this instanceof MinLengthValidator)) { return new MinLengthValidator(limitValue) }
+    BaseValidator.call(this, limitValue)
+  }
+, compare: function(a, b) { return a < b }
+, clean: function(x) { return x.length }
+, message: 'Ensure this value has at least {limitValue} characters (it has {showValue}).'
+, code: 'minLength'
+})
+
+/**
+ * Validates that input is at most a given length.
+ */
+var MaxLengthValidator = BaseValidator.extend({
+  constructor: function(limitValue) {
+    if (!(this instanceof MaxLengthValidator)) { return new MaxLengthValidator(limitValue) }
+    BaseValidator.call(this, limitValue)
+  }
+, compare: function(a, b) { return a > b }
+, clean: function(x) { return x.length }
+, message: 'Ensure this value has at most {limitValue} characters (it has {showValue}).'
+, code: 'maxLength'
+})
+
+module.exports = {
+  EMPTY_VALUES: EMPTY_VALUES
+, isEmptyValue: isEmptyValue
+, isCallable: isCallable
+, callValidator: callValidator
+, RegexValidator: RegexValidator
+, URLValidator: URLValidator
+, EmailValidator: EmailValidator
+, validateEmail: validateEmail
+, validateSlug: validateSlug
+, validateIPv4Address: validateIPv4Address
+, validateIPv6Address: validateIPv6Address
+, validateIPv46Address: validateIPv46Address
+, ipAddressValidators: ipAddressValidators
+, validateCommaSeparatedIntegerList: validateCommaSeparatedIntegerList
+, BaseValidator: BaseValidator
+, MaxValueValidator: MaxValueValidator
+, MinValueValidator: MinValueValidator
+, MaxLengthValidator: MaxLengthValidator
+, MinLengthValidator: MinLengthValidator
+, ValidationError: ValidationError
+, ipv6: ipv6
+}
+
+},{"./errors":1,"./ipv6":2,"Concur":4,"isomorph/format":6,"isomorph/is":7,"isomorph/object":8,"isomorph/url":9,"punycode":5}],4:[function(require,module,exports){
+var is = require('isomorph/is')
+  , object = require('isomorph/object')
+
+/**
+ * Mixes in properties from one object to another. If the source object is a
+ * Function, its prototype is mixed in instead.
+ */
+function mixin(dest, src) {
+  if (is.Function(src)) {
+    object.extend(dest, src.prototype)
+  }
+  else {
+    object.extend(dest, src)
+  }
+}
+
+/**
+ * Applies mixins specified as a __mixin__ property on the given properties
+ * object, returning an object containing the mixed in properties.
+ */
+function applyMixins(properties) {
+  var mixins = properties.__mixin__
+  if (!is.Array(mixins)) {
+    mixins = [mixins]
+  }
+  var mixedProperties = {}
+  for (var i = 0, l = mixins.length; i < l; i++) {
+    mixin(mixedProperties, mixins[i])
+  }
+  delete properties.__mixin__
+  return object.extend(mixedProperties, properties)
+}
+
+/**
+ * Inherits another constructor's prototype and sets its prototype and
+ * constructor properties in one fell swoop.
+ *
+ * If a child constructor is not provided via prototypeProps.constructor,
+ * a new constructor will be created.
+ */
+function inheritFrom(parentConstructor, prototypeProps, constructorProps) {
+  // Get or create a child constructor
+  var childConstructor
+  if (prototypeProps && object.hasOwn(prototypeProps, 'constructor')) {
+    childConstructor = prototypeProps.constructor
+  }
+  else {
+    childConstructor = function() {
+      parentConstructor.apply(this, arguments)
+    }
+  }
+
+  // Base constructors should only have the properties they're defined with
+  if (parentConstructor !== Concur) {
+    // Inherit the parent's prototype
+    object.inherits(childConstructor, parentConstructor)
+    childConstructor.__super__ = parentConstructor.prototype
+  }
+
+  // Add prototype properties, if given
+  if (prototypeProps) {
+    object.extend(childConstructor.prototype, prototypeProps)
+  }
+
+  // Add constructor properties, if given
+  if (constructorProps) {
+    object.extend(childConstructor, constructorProps)
+  }
+
+  return childConstructor
+}
+
+/**
+ * Namespace and dummy constructor for initial extension.
+ */
+var Concur = module.exports = function() {}
+
+/**
+ * Creates or uses a child constructor to inherit from the the call
+ * context, which is expected to be a constructor.
+ */
+Concur.extend = function(prototypeProps, constructorProps) {
+  // If the constructor being inherited from has a __meta__ function somewhere
+  // in its prototype chain, call it to customise prototype and constructor
+  // properties before they're used to set up the new constructor's prototype.
+  if (typeof this.prototype.__meta__ != 'undefined') {
+    // Property objects must always exist so properties can be added to
+    // and removed from them.
+    prototypeProps = prototypeProps || {}
+    constructorProps = constructorProps || {}
+    this.prototype.__meta__(prototypeProps, constructorProps)
+  }
+
+  // If any mixins are specified, mix them into the property objects
+  if (prototypeProps && object.hasOwn(prototypeProps, '__mixin__')) {
+    prototypeProps = applyMixins(prototypeProps)
+  }
+  if (constructorProps && object.hasOwn(constructorProps, '__mixin__')) {
+    constructorProps = applyMixins(constructorProps)
+  }
+
+  // Set up and return the new child constructor
+  var childConstructor = inheritFrom(this,
+                                     prototypeProps,
+                                     constructorProps)
+  childConstructor.extend = this.extend
+  return childConstructor
+}
+
+},{"isomorph/is":7,"isomorph/object":8}],5:[function(require,module,exports){
+var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};/*! http://mths.be/punycode v1.2.4 by @mathias */
 ;(function(root) {
+
+	/** Detect free variables */
+	var freeExports = typeof exports == 'object' && exports;
+	var freeModule = typeof module == 'object' && module &&
+		module.exports == freeExports && module;
+	var freeGlobal = typeof global == 'object' && global;
+	if (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal) {
+		root = freeGlobal;
+	}
 
 	/**
 	 * The `punycode` object.
@@ -32,13 +821,6 @@ require.define("punycode", function(module, exports, require) {
 	 * @type Object
 	 */
 	var punycode,
-
-	/** Detect free variables `define`, `exports`, `module` and `require` */
-	freeDefine = typeof define == 'function' && typeof define.amd == 'object' &&
-		define.amd && define,
-	freeExports = typeof exports == 'object' && exports,
-	freeModule = typeof module == 'object' && module,
-	freeRequire = typeof require == 'function' && require,
 
 	/** Highest positive signed 32-bit float value */
 	maxInt = 2147483647, // aka. 0x7FFFFFFF or 2^31-1
@@ -54,14 +836,13 @@ require.define("punycode", function(module, exports, require) {
 	delimiter = '-', // '\x2D'
 
 	/** Regular expressions */
-	regexNonASCII = /[^ -~]/, // unprintable ASCII chars + non-ASCII chars
 	regexPunycode = /^xn--/,
+	regexNonASCII = /[^ -~]/, // unprintable ASCII chars + non-ASCII chars
+	regexSeparators = /\x2E|\u3002|\uFF0E|\uFF61/g, // RFC 3490 separators
 
 	/** Error messages */
 	errors = {
-		'overflow': 'Overflow: input needs wider integers to process.',
-		'ucs2decode': 'UCS-2(decode): illegal sequence',
-		'ucs2encode': 'UCS-2(encode): illegal value',
+		'overflow': 'Overflow: input needs wider integers to process',
 		'not-basic': 'Illegal input >= 0x80 (not a basic code point)',
 		'invalid-input': 'Invalid input'
 	},
@@ -112,12 +893,11 @@ require.define("punycode", function(module, exports, require) {
 	 * function.
 	 */
 	function mapDomain(string, fn) {
-		var glue = '.';
-		return map(string.split(glue), fn).join(glue);
+		return map(string.split(regexSeparators), fn).join('.');
 	}
 
 	/**
-	 * Creates an array containing the decimal code points of each Unicode
+	 * Creates an array containing the numeric code points of each Unicode
 	 * character in the string. While JavaScript uses UCS-2 internally,
 	 * this function will convert a pair of surrogate halves (each of which
 	 * UCS-2 exposes as separate characters) into a single code point,
@@ -137,32 +917,35 @@ require.define("punycode", function(module, exports, require) {
 		    extra;
 		while (counter < length) {
 			value = string.charCodeAt(counter++);
-			if ((value & 0xF800) == 0xD800) {
+			if (value >= 0xD800 && value <= 0xDBFF && counter < length) {
+				// high surrogate, and there is a next character
 				extra = string.charCodeAt(counter++);
-				if ((value & 0xFC00) != 0xD800 || (extra & 0xFC00) != 0xDC00) {
-					error('ucs2decode');
+				if ((extra & 0xFC00) == 0xDC00) { // low surrogate
+					output.push(((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000);
+				} else {
+					// unmatched surrogate; only append this code unit, in case the next
+					// code unit is the high surrogate of a surrogate pair
+					output.push(value);
+					counter--;
 				}
-				value = ((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000;
+			} else {
+				output.push(value);
 			}
-			output.push(value);
 		}
 		return output;
 	}
 
 	/**
-	 * Creates a string based on an array of decimal code points.
+	 * Creates a string based on an array of numeric code points.
 	 * @see `punycode.ucs2.decode`
 	 * @memberOf punycode.ucs2
 	 * @name encode
-	 * @param {Array} codePoints The array of decimal code points.
+	 * @param {Array} codePoints The array of numeric code points.
 	 * @returns {String} The new Unicode string (UCS-2).
 	 */
 	function ucs2encode(array) {
 		return map(array, function(value) {
 			var output = '';
-			if ((value & 0xF800) == 0xD800) {
-				error('ucs2encode');
-			}
 			if (value > 0xFFFF) {
 				value -= 0x10000;
 				output += stringFromCharCode(value >>> 10 & 0x3FF | 0xD800);
@@ -177,19 +960,22 @@ require.define("punycode", function(module, exports, require) {
 	 * Converts a basic code point into a digit/integer.
 	 * @see `digitToBasic()`
 	 * @private
-	 * @param {Number} codePoint The basic (decimal) code point.
+	 * @param {Number} codePoint The basic numeric code point value.
 	 * @returns {Number} The numeric value of a basic code point (for use in
 	 * representing integers) in the range `0` to `base - 1`, or `base` if
 	 * the code point does not represent a value.
 	 */
 	function basicToDigit(codePoint) {
-		return codePoint - 48 < 10
-			? codePoint - 22
-			: codePoint - 65 < 26
-				? codePoint - 65
-				: codePoint - 97 < 26
-					? codePoint - 97
-					: base;
+		if (codePoint - 48 < 10) {
+			return codePoint - 22;
+		}
+		if (codePoint - 65 < 26) {
+			return codePoint - 65;
+		}
+		if (codePoint - 97 < 26) {
+			return codePoint - 97;
+		}
+		return base;
 	}
 
 	/**
@@ -201,7 +987,7 @@ require.define("punycode", function(module, exports, require) {
 	 * representing integers) is `digit`, which needs to be in the range
 	 * `0` to `base - 1`. If `flag` is non-zero, the uppercase form is
 	 * used; else, the lowercase form is used. The behavior is undefined
-	 * if flag is non-zero and `digit` has no uppercase form.
+	 * if `flag` is non-zero and `digit` has no uppercase form.
 	 */
 	function digitToBasic(digit, flag) {
 		//  0..25 map to ASCII a..z or A..Z
@@ -225,25 +1011,11 @@ require.define("punycode", function(module, exports, require) {
 	}
 
 	/**
-	 * Converts a basic code point to lowercase is `flag` is falsy, or to
-	 * uppercase if `flag` is truthy. The code point is unchanged if it's
-	 * caseless. The behavior is undefined if `codePoint` is not a basic code
-	 * point.
-	 * @private
-	 * @param {Number} codePoint The numeric value of a basic code point.
-	 * @returns {Number} The resulting basic code point.
-	 */
-	function encodeBasic(codePoint, flag) {
-		codePoint -= (codePoint - 97 < 26) << 5;
-		return codePoint + (!flag && codePoint - 65 < 26) << 5;
-	}
-
-	/**
-	 * Converts a Punycode string of ASCII code points to a string of Unicode
-	 * code points.
+	 * Converts a Punycode string of ASCII-only symbols to a string of Unicode
+	 * symbols.
 	 * @memberOf punycode
-	 * @param {String} input The Punycode string of ASCII code points.
-	 * @returns {String} The resulting string of Unicode code points.
+	 * @param {String} input The Punycode string of ASCII-only symbols.
+	 * @returns {String} The resulting string of Unicode symbols.
 	 */
 	function decode(input) {
 		// Don't use UCS-2
@@ -261,7 +1033,6 @@ require.define("punycode", function(module, exports, require) {
 		    k,
 		    digit,
 		    t,
-		    length,
 		    /** Cached calculation results */
 		    baseMinusT;
 
@@ -341,11 +1112,11 @@ require.define("punycode", function(module, exports, require) {
 	}
 
 	/**
-	 * Converts a string of Unicode code points to a Punycode string of ASCII
-	 * code points.
+	 * Converts a string of Unicode symbols to a Punycode string of ASCII-only
+	 * symbols.
 	 * @memberOf punycode
-	 * @param {String} input The string of Unicode code points.
-	 * @returns {String} The resulting Punycode string of ASCII code points.
+	 * @param {String} input The string of Unicode symbols.
+	 * @returns {String} The resulting Punycode string of ASCII-only symbols.
 	 */
 	function encode(input) {
 		var n,
@@ -497,10 +1268,10 @@ require.define("punycode", function(module, exports, require) {
 		 * @memberOf punycode
 		 * @type String
 		 */
-		'version': '1.0.0',
+		'version': '1.2.4',
 		/**
 		 * An object of methods to convert from JavaScript's internal character
-		 * representation (UCS-2) to decimal Unicode code points, and back.
+		 * representation (UCS-2) to Unicode code points, and back.
 		 * @see <http://mathiasbynens.be/notes/javascript-encoding>
 		 * @memberOf punycode
 		 * @type Object
@@ -516,27 +1287,87 @@ require.define("punycode", function(module, exports, require) {
 	};
 
 	/** Expose `punycode` */
-	if (freeExports) {
-		if (freeModule && freeModule.exports == freeExports) {
-			// in Node.js or Ringo 0.8+
+	// Some AMD build optimizers, like r.js, check for specific condition patterns
+	// like the following:
+	if (
+		typeof define == 'function' &&
+		typeof define.amd == 'object' &&
+		define.amd
+	) {
+		define('punycode', function() {
+			return punycode;
+		});
+	} else if (freeExports && !freeExports.nodeType) {
+		if (freeModule) { // in Node.js or RingoJS v0.8.0+
 			freeModule.exports = punycode;
-		} else {
-			// in Narwhal or Ringo 0.7-
+		} else { // in Narwhal or RingoJS v0.7.0-
 			for (key in punycode) {
 				punycode.hasOwnProperty(key) && (freeExports[key] = punycode[key]);
 			}
 		}
-	} else if (freeDefine) {
-		// via curl.js or RequireJS
-		define('punycode', punycode);
-	} else {
-		// in a browser or Rhino
+	} else { // in Rhino or a web browser
 		root.punycode = punycode;
 	}
 
-}(this));})
+}(this));
 
-require.define("isomorph/is", function(module, exports, require) {
+},{}],6:[function(require,module,exports){
+var is = require('./is')
+  , slice = Array.prototype.slice
+  , formatRegExp = /%[%s]/g
+  , formatObjRegExp = /({{?)(\w+)}/g
+
+/**
+ * Replaces %s placeholders in a string with positional arguments.
+ */
+function format(s) {
+  return formatArr(s, slice.call(arguments, 1))
+}
+
+/**
+ * Replaces %s placeholders in a string with array contents.
+ */
+function formatArr(s, a) {
+  var i = 0
+  return s.replace(formatRegExp, function(m) { return m == '%%' ? '%' : a[i++] })
+}
+
+/**
+ * Replaces {propertyName} placeholders in a string with object properties.
+ */
+function formatObj(s, o) {
+  return s.replace(formatObjRegExp, function(m, b, p) { return b.length == 2 ? m.slice(1) : o[p] })
+}
+
+var units = 'kMGTPEZY'
+  , stripDecimals = /\.00$|0$/
+
+/**
+ * Formats bytes as a file size with the appropriately scaled units.
+ */
+function fileSize(bytes, threshold) {
+  threshold = Math.min(threshold || 768, 1024)
+  var i = -1
+    , unit = 'bytes'
+    , size = bytes
+  while (size > threshold && i < units.length) {
+    size = size / 1024
+    i++
+  }
+  if (i > -1) {
+    unit = units.charAt(i) + 'B'
+  }
+  return size.toFixed(2).replace(stripDecimals, '') + ' ' + unit
+}
+
+module.exports = {
+  format: format
+, formatArr: formatArr
+, formatObj: formatObj
+, fileSize: fileSize
+}
+
+},{"./is":7}],7:[function(require,module,exports){
 var toString = Object.prototype.toString
 
 // Type checks
@@ -599,66 +1430,8 @@ module.exports = {
 , RegExp: isRegExp
 , String: isString
 }
-})
 
-require.define("isomorph/format", function(module, exports, require) {
-var is = require('./is')
-  , slice = Array.prototype.slice
-  , formatRegExp = /%[%s]/g
-  , formatObjRegExp = /({{?)(\w+)}/g
-
-/**
- * Replaces %s placeholders in a string with positional arguments.
- */
-function format(s) {
-  return formatArr(s, slice.call(arguments, 1))
-}
-
-/**
- * Replaces %s placeholders in a string with array contents.
- */
-function formatArr(s, a) {
-  var i = 0
-  return s.replace(formatRegExp, function(m) { return m == '%%' ? '%' : a[i++] })
-}
-
-/**
- * Replaces {propertyName} placeholders in a string with object properties.
- */
-function formatObj(s, o) {
-  return s.replace(formatObjRegExp, function(m, b, p) { return b.length == 2 ? m.slice(1) : o[p] })
-}
-
-var units = 'kMGTPEZY'
-  , stripDecimals = /\.00$|0$/
-
-/**
- * Formats bytes as a file size with the appropriately scaled units.
- */
-function fileSize(bytes, threshold) {
-  threshold = Math.min(threshold || 768, 1024)
-  var i = -1
-    , unit = 'bytes'
-    , size = bytes
-  while (size > threshold && i < units.length) {
-    size = size / 1024
-    i++
-  }
-  if (i > -1) {
-    unit = units.charAt(i) + 'B'
-  }
-  return size.toFixed(2).replace(stripDecimals, '') + ' ' + unit
-}
-
-module.exports = {
-  format: format
-, formatArr: formatArr
-, formatObj: formatObj
-, fileSize: fileSize
-}
-})
-
-require.define("isomorph/object", function(module, exports, require) {
+},{}],8:[function(require,module,exports){
 /**
  * Callbound version of Object.prototype.hasOwnProperty(), ready to be called
  * with an object and property name.
@@ -750,9 +1523,8 @@ module.exports = {
 , lookup: lookup
 , get: get
 }
-})
 
-require.define("isomorph/url", function(module, exports, require) {
+},{}],9:[function(require,module,exports){
 // parseUri 1.2.2
 // (c) Steven Levithan <stevenlevithan.com>
 // MIT License
@@ -840,762 +1612,7 @@ module.exports = {
   parseUri: parseUri
 , makeUri: makeUri
 }
-})
 
-require.define("Concur", function(module, exports, require) {
-var is = require('isomorph/is')
-  , object = require('isomorph/object')
-
-/**
- * Mixes in properties from one object to another. If the source object is a
- * Function, its prototype is mixed in instead.
- */
-function mixin(dest, src) {
-  if (is.Function(src)) {
-    object.extend(dest, src.prototype)
-  }
-  else {
-    object.extend(dest, src)
-  }
-}
-
-/**
- * Applies mixins specified as a __mixin__ property on the given properties
- * object, returning an object containing the mixed in properties.
- */
-function applyMixins(properties) {
-  var mixins = properties.__mixin__
-  if (!is.Array(mixins)) {
-    mixins = [mixins]
-  }
-  var mixedProperties = {}
-  for (var i = 0, l = mixins.length; i < l; i++) {
-    mixin(mixedProperties, mixins[i])
-  }
-  delete properties.__mixin__
-  return object.extend(mixedProperties, properties)
-}
-
-/**
- * Inherits another constructor's prototype and sets its prototype and
- * constructor properties in one fell swoop.
- *
- * If a child constructor is not provided via prototypeProps.constructor,
- * a new constructor will be created.
- */
-function inheritFrom(parentConstructor, prototypeProps, constructorProps) {
-  // Get or create a child constructor
-  var childConstructor
-  if (prototypeProps && object.hasOwn(prototypeProps, 'constructor')) {
-    childConstructor = prototypeProps.constructor
-  }
-  else {
-    childConstructor = function() {
-      parentConstructor.apply(this, arguments)
-    }
-  }
-
-  // Base constructors should only have the properties they're defined with
-  if (parentConstructor !== Concur) {
-    // Inherit the parent's prototype
-    object.inherits(childConstructor, parentConstructor)
-    childConstructor.__super__ = parentConstructor.prototype
-  }
-
-  // Add prototype properties, if given
-  if (prototypeProps) {
-    object.extend(childConstructor.prototype, prototypeProps)
-  }
-
-  // Add constructor properties, if given
-  if (constructorProps) {
-    object.extend(childConstructor, constructorProps)
-  }
-
-  return childConstructor
-}
-
-/**
- * Namespace and dummy constructor for initial extension.
- */
-var Concur = module.exports = function() {}
-
-/**
- * Creates or uses a child constructor to inherit from the the call
- * context, which is expected to be a constructor.
- */
-Concur.extend = function(prototypeProps, constructorProps) {
-  // If the constructor being inherited from has a __meta__ function somewhere
-  // in its prototype chain, call it to customise prototype and constructor
-  // properties before they're used to set up the new constructor's prototype.
-  if (typeof this.prototype.__meta__ != 'undefined') {
-    // Property objects must always exist so properties can be added to
-    // and removed from them.
-    prototypeProps = prototypeProps || {}
-    constructorProps = constructorProps || {}
-    this.prototype.__meta__(prototypeProps, constructorProps)
-  }
-
-  // If any mixins are specified, mix them into the property objects
-  if (prototypeProps && object.hasOwn(prototypeProps, '__mixin__')) {
-    prototypeProps = applyMixins(prototypeProps)
-  }
-  if (constructorProps && object.hasOwn(constructorProps, '__mixin__')) {
-    constructorProps = applyMixins(constructorProps)
-  }
-
-  // Set up and return the new child constructor
-  var childConstructor = inheritFrom(this,
-                                     prototypeProps,
-                                     constructorProps)
-  childConstructor.extend = this.extend
-  return childConstructor
-}
-})
-
-require.define("./errors", function(module, exports, require) {
-var Concur = require('Concur')
-  , is = require('isomorph/is')
-  , object = require('isomorph/object')
-
-/**
- * A validation error, containing a list of messages. Single messages
- * (e.g. those produced by validators may have an associated error code
- * and parameters to allow customisation by fields.
- */
-var ValidationError = Concur.extend({
-  constructor: function(message, kwargs) {
-    if (!(this instanceof ValidationError)) return new ValidationError(message, kwargs)
-    kwargs = object.extend({code: null, params: null}, kwargs)
-    if (is.Array(message)) {
-      this.messages = message
-    }
-    else {
-      this.code = kwargs.code
-      this.params = kwargs.params
-      this.messages = [message]
-    }
-  }
-})
-
-ValidationError.prototype.toString = function() {
-  return ('ValidationError: ' + this.messages.join('; '))
-}
-
-module.exports = {
-  ValidationError: ValidationError
-}
-})
-
-require.define("./ipv6", function(module, exports, require) {
-var object = require('isomorph/object')
-
-var errors = require('./errors')
-
-var ValidationError = errors.ValidationError
-
-var hexRE = /^[0-9a-f]+$/
-
-/**
- * Cleans a IPv6 address string.
- *
- *  Validity is checked by calling isValidIPv6Address() - if an invalid address
- *  is passed, a ValidationError is thrown.
- *
- * Replaces the longest continious zero-sequence with '::' and removes leading
- * zeroes and makes sure all hextets are lowercase.
- */
-function cleanIPv6Address(ipStr, kwargs) {
-  kwargs = object.extend({
-    unpackIPv4: false, errorMessage: 'This is not a valid IPv6 address'
-  }, kwargs)
-
-  var bestDoublecolonStart = -1
-    , bestDoublecolonLen = 0
-    , doublecolonStart = -1
-    , doublecolonLen = 0
-
-  if (!isValidIPv6Address(ipStr)) {
-    throw ValidationError(kwargs.errorMessage)
-  }
-
-  // This algorithm can only handle fully exploded IP strings
-  ipStr = _explodeShorthandIPstring(ipStr)
-  ipStr = _sanitiseIPv4Mapping(ipStr)
-
-  // If needed, unpack the IPv4 and return straight away
-  if (kwargs.unpackIPv4) {
-    var ipv4Unpacked = _unpackIPv4(ipStr)
-    if (ipv4Unpacked) {
-      return ipv4Unpacked
-    }
-  }
-
-  var hextets = ipStr.split(':')
-
-  for (var i = 0, l = hextets.length; i < l; i++) {
-    // Remove leading zeroes
-    hextets[i] = hextets[i].replace(/^0+/, '')
-    if (hextets[i] == '') {
-      hextets[i] = '0'
-    }
-
-    // Determine best hextet to compress
-    if (hextets[i] == '0') {
-      doublecolonLen += 1
-      if (doublecolonStart == -1) {
-        // Start a sequence of zeros
-        doublecolonStart = i
-      }
-      if (doublecolonLen > bestDoublecolonLen) {
-        // This is the longest sequence so far
-        bestDoublecolonLen = doublecolonLen
-        bestDoublecolonStart = doublecolonStart
-      }
-    }
-    else {
-      doublecolonLen = 0
-      doublecolonStart = -1
-    }
-  }
-
-  // Compress the most suitable hextet
-  if (bestDoublecolonLen > 1) {
-    var bestDoublecolonEnd = bestDoublecolonStart + bestDoublecolonLen
-    // For zeros at the end of the address
-    if (bestDoublecolonEnd == hextets.length) {
-      hextets.push('')
-    }
-    hextets.splice(bestDoublecolonStart, bestDoublecolonLen, '')
-    // For zeros at the beginning of the address
-    if (bestDoublecolonStart == 0) {
-      hextets.unshift('')
-    }
-  }
-
-  return hextets.join(':').toLowerCase()
-}
-
-/**
- * Sanitises IPv4 mapping in a expanded IPv6 address.
- *
- * This converts ::ffff:0a0a:0a0a to ::ffff:10.10.10.10.
- * If there is nothing to sanitise, returns an unchanged string.
- */
-function _sanitiseIPv4Mapping(ipStr) {
-  if (ipStr.toLowerCase().indexOf('0000:0000:0000:0000:0000:ffff:') != 0) {
-    // Not an ipv4 mapping
-    return ipStr
-  }
-
-  var hextets = ipStr.split(':')
-
-  if (hextets[hextets.length - 1].indexOf('.') != -1) {
-    // Already sanitized
-    return ipStr
-  }
-
-  var ipv4Address = [
-    parseInt(hextets[6].substring(0, 2), 16)
-  , parseInt(hextets[6].substring(2, 4), 16)
-  , parseInt(hextets[7].substring(0, 2), 16)
-  , parseInt(hextets[7].substring(2, 4), 16)
-  ].join('.')
-
-  return hextets.slice(0, 6).join(':') +  ':' + ipv4Address
-}
-
-/**
- * Unpacks an IPv4 address that was mapped in a compressed IPv6 address.
- *
- * This converts 0000:0000:0000:0000:0000:ffff:10.10.10.10 to 10.10.10.10.
- * If there is nothing to sanitize, returns null.
- */
-function _unpackIPv4(ipStr) {
-  if (ipStr.toLowerCase().indexOf('0000:0000:0000:0000:0000:ffff:') != 0) {
-    return null
-  }
-
-  var hextets = ipStr.split(':')
-  return hextets.pop()
-}
-
-/**
- * Determines if we have a valid IPv6 address.
- */
-function isValidIPv6Address(ipStr) {
-  var validateIPv4Address = require('./validators').validateIPv4Address
-
-  // We need to have at least one ':'
-  if (ipStr.indexOf(':') == -1) {
-    return false
-  }
-
-  // We can only have one '::' shortener
-  if (String_count(ipStr, '::') > 1) {
-    return false
-  }
-
-  // '::' should be encompassed by start, digits or end
-  if (ipStr.indexOf(':::') != -1) {
-    return false
-  }
-
-  // A single colon can neither start nor end an address
-  if ((ipStr.charAt(0) == ':' && ipStr.charAt(1) != ':') ||
-      (ipStr.charAt(ipStr.length - 1) == ':' &&
-       ipStr.charAt(ipStr.length - 2) != ':')) {
-    return false
-  }
-
-  // We can never have more than 7 ':' (1::2:3:4:5:6:7:8 is invalid)
-  if (String_count(ipStr, ':') > 7) {
-    return false
-  }
-
-  // If we have no concatenation, we need to have 8 fields with 7 ':'
-  if (ipStr.indexOf('::') == -1 && String_count(ipStr, ':') != 7) {
-    // We might have an IPv4 mapped address
-    if (String_count(ipStr, '.') != 3) {
-      return false
-    }
-  }
-
-  ipStr = _explodeShorthandIPstring(ipStr)
-
-  // Now that we have that all squared away, let's check that each of the
-  // hextets are between 0x0 and 0xFFFF.
-  var hextets = ipStr.split(':')
-  for (var i = 0, l = hextets.length, hextet; i < l; i++) {
-    hextet = hextets[i]
-    if (String_count(hextet, '.') == 3) {
-      // If we have an IPv4 mapped address, the IPv4 portion has to
-      // be at the end of the IPv6 portion.
-      if (ipStr.split(':').pop() != hextet) {
-        return false
-      }
-      try {
-        validateIPv4Address.__call__(hextet)
-      }
-      catch (e) {
-        if (!(e instanceof ValidationError)) {
-          throw e
-        }
-        return false
-      }
-    }
-    else {
-      if (!hexRE.test(hextet)) {
-        return false
-      }
-      var intValue = parseInt(hextet, 16)
-      if (isNaN(intValue) || intValue < 0x0 || intValue > 0xFFFF) {
-        return false
-      }
-    }
-  }
-
-  return true
-}
-
-/**
- * Expands a shortened IPv6 address.
- */
-function _explodeShorthandIPstring(ipStr) {
-  if (!_isShortHand(ipStr)) {
-    // We've already got a longhand ipStr
-    return ipStr
-  }
-
-  var newIp = []
-    , hextets = ipStr.split('::')
-
-  // If there is a ::, we need to expand it with zeroes to get to 8 hextets -
-  // unless there is a dot in the last hextet, meaning we're doing v4-mapping
-  var fillTo = (ipStr.split(':').pop().indexOf('.') != -1) ? 7 : 8
-
-  if (hextets.length > 1) {
-    var sep = hextets[0].split(':').length + hextets[1].split(':').length
-    newIp = hextets[0].split(':')
-    for (var i = 0, l = fillTo - sep; i < l; i++) {
-      newIp.push('0000')
-    }
-    newIp = newIp.concat(hextets[1].split(':'))
-  }
-  else {
-    newIp = ipStr.split(':')
-  }
-
-  // Now need to make sure every hextet is 4 lower case characters.
-  // If a hextet is < 4 characters, we've got missing leading 0's.
-  var retIp = []
-  for (var i = 0, l = newIp.length; i < l; i++) {
-    retIp.push(zeroPadding(newIp[i], 4) + newIp[i].toLowerCase())
-  }
-  return retIp.join(':')
-}
-
-/**
- * Determines if the address is shortened.
- */
-function _isShortHand(ipStr) {
-  if (String_count(ipStr, '::') == 1) {
-    return true
-  }
-  var parts = ipStr.split(':')
-  for (var i = 0, l = parts.length; i < l; i++) {
-    if (parts[i].length < 4) {
-      return true
-    }
-  }
-  return false
-}
-
-// Utilities
-
-function zeroPadding(str, length) {
-  if (str.length >= length) {
-    return ''
-  }
-  return new Array(length - str.length + 1).join('0')
-}
-
-function String_count(str, subStr) {
-  return str.split(subStr).length - 1
-}
-
-module.exports = {
-  cleanIPv6Address: cleanIPv6Address
-, isValidIPv6Address: isValidIPv6Address
-}
-})
-
-require.define(["./validators","validators"], function(module, exports, require) {
-var Concur = require('Concur')
-  , is = require('isomorph/is')
-  , format = require('isomorph/format').formatObj
-  , punycode = require('punycode')
-  , url = require('isomorph/url')
-
-var errors = require('./errors')
-  , ipv6 = require('./ipv6')
-
-var ValidationError = errors.ValidationError
-  , isValidIPv6Address = ipv6.isValidIPv6Address
-
-var EMPTY_VALUES = [null, undefined, '']
-
-var isEmptyValue = function(value) {
-  for (var i = 0, l = EMPTY_VALUES.length; i < l; i++) {
-    if (value === EMPTY_VALUES[i]) {
-      return true
-    }
-  }
-  return false
-}
-
-function isCallable(o) {
-  return (is.Function(o) || is.Function(o.__call__))
-}
-
-/**
- * Calls a validator, which may be a function or an objects with a
- * __call__ method, with the given value.
- */
-function callValidator(v, value) {
-  if (is.Function(v)) {
-    v(value)
-  }
-  else if (is.Function(v.__call__)) {
-    v.__call__(value)
-  }
-}
-
-// See also http://tools.ietf.org/html/rfc2822#section-3.2.5
-var EMAIL_RE = new RegExp(
-      "(^[-!#$%&'*+/=?^_`{}|~0-9A-Z]+(\\.[-!#$%&'*+/=?^_`{}|~0-9A-Z]+)*"                                // Dot-atom
-    + '|^"([\\001-\\010\\013\\014\\016-\\037!#-\\[\\]-\\177]|\\\\[\\001-\\011\\013\\014\\016-\\177])*"' // Quoted-string
-    + ')@((?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+[A-Z]{2,6}\\.?$)'                                 // Domain
-    + '|\\[(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)){3}\\]$'              // Literal form, ipv4 address (SMTP 4.1.3)
-    , 'i'
-    )
-  , SLUG_RE = /^[-\w]+$/
-  , IPV4_RE = /^(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}$/
-  , COMMA_SEPARATED_INT_LIST_RE = /^[\d,]+$/
-
-/**
- * Validates that input matches a regular expression.
- */
-var RegexValidator = Concur.extend({
-  constructor: function(regex, message, code) {
-    if (!(this instanceof RegexValidator)) return new RegexValidator(regex, message, code)
-    if (regex) {
-      this.regex = regex
-    }
-    if (message) {
-      this.message = message
-    }
-    if (code) {
-      this.code = code
-    }
-    if (is.String(this.regex)) {
-      this.regex = new RegExp(this.regex)
-    }
-  }
-, regex: ''
-, message: 'Enter a valid value.'
-, code: 'invalid'
-, __call__: function(value) {
-    if (!this.regex.test(value)) {
-      throw ValidationError(this.message, {code: this.code})
-    }
-  }
-})
-
-/**
- * Validates that input looks like a valid URL.
- */
-var URLValidator = RegexValidator.extend({
-  constructor:function() {
-    if (!(this instanceof URLValidator)) return new URLValidator()
-    RegexValidator.call(this)
-  }
-, regex: new RegExp(
-    '^(?:http|ftp)s?://'                              // http:// or https://
-  + '(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+' // Domain...
-  + '(?:[A-Z]{2,6}\\.?|[A-Z0-9-]{2,}\\.?)|'
-  + 'localhost|'                                      // localhost...
-  + '\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})'      // ...or IP
-  + '(?::\\d+)?'                                      // Optional port
-  + '(?:/?|[/?]\\S+)$'
-  , 'i'
-  )
-, message: 'Enter a valid URL.'
-, __call__: function(value) {
-    try {
-      RegexValidator.prototype.__call__.call(this, value)
-    }
-    catch (e) {
-      if (!(e instanceof ValidationError) || !value) {
-        throw e
-      }
-
-      // Trivial case failed - try for possible IDN domain
-      var urlFields = url.parseUri(value)
-      try {
-        urlFields.host = punycode.toASCII(urlFields.host)
-      }
-      catch (ue) {
-        throw e
-      }
-      value = url.makeUri(urlFields)
-      RegexValidator.prototype.__call__.call(this, value)
-    }
-  }
-})
-
-var EmailValidator = RegexValidator.extend({
-  constructor: function(regex, message, code) {
-    if (!(this instanceof EmailValidator)) return new EmailValidator(regex, message, code)
-    RegexValidator.call(this, regex, message, code)
-  }
-, __call__ : function(value) {
-    try {
-      RegexValidator.prototype.__call__.call(this, value)
-    }
-    catch (e) {
-      if (!(e instanceof ValidationError) ||
-          !value ||
-          value.indexOf('@') == -1) {
-        throw e
-      }
-
-      // Trivial case failed - try for possible IDN domain-part
-      var parts = value.split('@')
-      try {
-        parts[parts.length - 1] = punycode.toASCII(parts[parts.length - 1])
-      }
-      catch (ue) {
-        throw e
-      }
-      RegexValidator.prototype.__call__.call(this, parts.join('@'))
-    }
-  }
-})
-
-/** Validates that input looks like a valid URL. */
-var validateURL = URLValidator()
-
-/** Validates that input looks like a valid e-mail address. */
-var validateEmail =
-    EmailValidator(EMAIL_RE,
-      'Enter a valid e-mail address.',
-      'invalid')
-
-/** Validates that input is a valid slug. */
-var validateSlug =
-    RegexValidator(SLUG_RE,
-      'Enter a valid "slug" consisting of letters, numbers, underscores or hyphens.',
-      'invalid')
-
-/** Validates that input is a valid IPv4 address. */
-var validateIPv4Address =
-    RegexValidator(IPV4_RE,
-      'Enter a valid IPv4 address.',
-      'invalid')
-
-/** Validates that input is a valid IPv6 address. */
-function validateIPv6Address(value) {
-  if (!isValidIPv6Address(value)) {
-    throw ValidationError('Enter a valid IPv6 address.', {code: 'invalid'})
-  }
-}
-
-/** Validates that input is a valid IPv4 or IPv6 address. */
-function validateIPv46Address(value) {
-  try {
-    validateIPv4Address.__call__(value)
-  }
-  catch (e) {
-    if (!(e instanceof ValidationError)) {
-      throw e
-    }
-
-    if (!isValidIPv6Address(value)) {
-      throw ValidationError('Enter a valid IPv4 or IPv6 address.', {code: 'invalid'})
-    }
-  }
-}
-
-var ipAddressValidatorMap = {
-  both: {validators: [validateIPv46Address], message: 'Enter a valid IPv4 or IPv6 address.'}
-, ipv4: {validators: [validateIPv4Address], message: 'Enter a valid IPv4 address.'}
-, ipv6: {validators: [validateIPv6Address], message: 'Enter a valid IPv6 address.'}
-}
-
-/**
- * Depending on the given parameters returns the appropriate validators for
- * a GenericIPAddressField.
- */
-function ipAddressValidators(protocol, unpackIPv4) {
-  if (protocol != 'both' && unpackIPv4) {
-    throw new Error('You can only use unpackIPv4 if protocol is set to "both"')
-  }
-  protocol = protocol.toLowerCase()
-  if (typeof ipAddressValidatorMap[protocol] == 'undefined') {
-    throw new Error('The protocol "' + protocol +'" is unknown')
-  }
-  return ipAddressValidatorMap[protocol]
-}
-
-/** Validates that input is a comma-separated list of integers. */
-var validateCommaSeparatedIntegerList =
-    RegexValidator(COMMA_SEPARATED_INT_LIST_RE,
-      'Enter only digits separated by commas.',
-      'invalid')
-
-/**
- * Base for validators which compare input against a given value.
- */
-var BaseValidator = Concur.extend({
-  constructor: function(limitValue) {
-    if (!(this instanceof BaseValidator)) return new BaseValidator(limitValue)
-    this.limitValue = limitValue
-  }
-, compare: function(a, b) { return a !== b }
-, clean: function(x) { return x }
-, message: 'Ensure this value is {limitValue} (it is {showValue}).'
-, code: 'limitValue'
-, __call__: function(value) {
-    var cleaned = this.clean(value)
-      , params = {limitValue: this.limitValue, showValue: cleaned}
-    if (this.compare(cleaned, this.limitValue)) {
-      throw ValidationError(format(this.message, params),
-                            {code: this.code, params: params})
-    }
-  }
-})
-
-/**
- * Validates that input is less than or equal to a given value.
- */
-var MaxValueValidator = BaseValidator.extend({
-  constructor: function(limitValue) {
-    if (!(this instanceof MaxValueValidator)) return new MaxValueValidator(limitValue)
-    BaseValidator.call(this, limitValue)
-  }
-, compare: function(a, b) { return a > b }
-, message: 'Ensure this value is less than or equal to {limitValue}.'
-, code: 'maxValue'
-})
-
-/**
- * Validates that input is greater than or equal to a given value.
- */
-var MinValueValidator = BaseValidator.extend({
-  constructor: function(limitValue) {
-    if (!(this instanceof MinValueValidator)) return new MinValueValidator(limitValue)
-    BaseValidator.call(this, limitValue)
-  }
-, compare: function(a, b) { return a < b }
-, message: 'Ensure this value is greater than or equal to {limitValue}.'
-, code: 'minValue'
-})
-
-/**
- * Validates that input is at least a given length.
- */
-var MinLengthValidator = BaseValidator.extend({
-  constructor: function(limitValue) {
-    if (!(this instanceof MinLengthValidator)) return new MinLengthValidator(limitValue)
-    BaseValidator.call(this, limitValue)
-  }
-, compare: function(a, b) { return a < b }
-, clean: function(x) { return x.length }
-, message: 'Ensure this value has at least {limitValue} characters (it has {showValue}).'
-, code: 'minLength'
-})
-
-/**
- * Validates that input is at most a given length.
- */
-var MaxLengthValidator = BaseValidator.extend({
-  constructor: function(limitValue) {
-    if (!(this instanceof MaxLengthValidator)) return new MaxLengthValidator(limitValue)
-    BaseValidator.call(this, limitValue)
-  }
-, compare: function(a, b) { return a > b }
-, clean: function(x) { return x.length }
-, message: 'Ensure this value has at most {limitValue} characters (it has {showValue}).'
-, code: 'maxLength'
-})
-
-module.exports = {
-  EMPTY_VALUES: EMPTY_VALUES
-, isEmptyValue: isEmptyValue
-, isCallable: isCallable
-, callValidator: callValidator
-, RegexValidator: RegexValidator
-, URLValidator: URLValidator
-, EmailValidator: EmailValidator
-, validateURL: validateURL
-, validateEmail: validateEmail
-, validateSlug: validateSlug
-, validateIPv4Address: validateIPv4Address
-, validateIPv6Address: validateIPv6Address
-, validateIPv46Address: validateIPv46Address
-, ipAddressValidators: ipAddressValidators
-, validateCommaSeparatedIntegerList: validateCommaSeparatedIntegerList
-, BaseValidator: BaseValidator
-, MaxValueValidator: MaxValueValidator
-, MinValueValidator: MinValueValidator
-, MaxLengthValidator: MaxLengthValidator
-, MinLengthValidator: MinLengthValidator
-, ValidationError: ValidationError
-, ipv6: ipv6
-}
-})
-
-window['validators'] = require('validators')
-
-})();
+},{}]},{},[3])
+(3)
+});
