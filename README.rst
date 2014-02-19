@@ -5,7 +5,8 @@ Validators |travis_status|
 .. |travis_status| image:: https://secure.travis-ci.org/insin/validators.png
    :target: http://travis-ci.org/insin/validators
 
-Validators which can be shared between browsers and `Node.js`_.
+Validators which can be shared between browsers and `Node.js`_, based on Django's
+core validators.
 
 Validators are either Functions or Objects with a ``__call__()`` function, which
 take a value and throw a ``ValidationError`` if they detect that it is invalid.
@@ -33,8 +34,8 @@ Error
 Validation error constructor.
 
 For customisation purposes, in addition to a validation message, a
-ValidationError may specify a ``code`` to itentify the category of error and any
-``params`` which were inserted into the validation message, when applicable.
+``ValidationError`` may specify a ``code`` to itentify the category of error and
+any ``params`` which were inserted into the validation message, when applicable.
 
 Utilities
 =========
@@ -70,27 +71,45 @@ defined.
 Validators
 ==========
 
-``RegexValidator(regex, message, code)``
-----------------------------------------
+``RegexValidator(options)``
+---------------------------
 
 Creates a validator which walidates that input matches a regular expression.
 
-``URLValidator()``
---------------------------
+Options which can be passed are:
+
+* ``regex`` -- the regular expression pattern to search for the provided value,
+  or a pre-compiled ``RegExp``.  By default, matches any string (including an
+  empty string)
+* ``message`` -- the error message used by ``ValidationError`` if validation
+  fails. Defaults to ``"Enter a valid value"``.
+* ``code`` -- the error code used by ``ValidationError`` if validation fails.
+  Defaults to ``"invalid"``.
+* ``inverseMatch`` -- the match mode for ``regex``. Defaults to ``false``.
+
+``URLValidator(options)``
+-------------------------
 
 Creates a validator which validates that input looks like a valid URL.
 
-``EmailValidator(regex, message, code)``
-----------------------------------------
+Options which can be passed are:
+
+* ``schemes`` -- allowed URL schemes. Defaults to
+  ``['http', 'https', 'ftp', 'ftps']``.
+
+``EmailValidator(options)``
+---------------------------
 
 Creates a validator which validates that input looks like a valid e-mail
 address.
 
-``validateURL(value)``
-----------------------
+Options which can be passed are:
 
-Validates that input looks like a valid URL -- this is a preconfigured instance
-of a ``URLValidator``,
+* ``message`` -- error message to be used in any generated ``ValidationError``.
+* ``code`` -- error code to be used in any generated ``ValidationError``.
+* ``whitelist`` -- a whitelist of domains which are allowed to be the only thing
+  to the right of the ``@`` in a valid email address -- defaults to
+  ``['localhost']``.
 
 ``validateEmail(value)``
 ------------------------
@@ -176,7 +195,7 @@ If an invalid address is passed, a ``ValidationError`` is thrown.
 MIT License
 ===========
 
-Copyright (c) 2012, Jonathan Buchanan
+Copyright (c) 2014, Jonathan Buchanan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

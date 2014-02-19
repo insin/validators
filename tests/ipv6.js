@@ -3,7 +3,7 @@ QUnit.module('ipv6')
 void function() {
 
 var isValidIPv6Address = validators.ipv6.isValidIPv6Address
-  , cleanIPv6Address = validators.ipv6.cleanIPv6Address
+var cleanIPv6Address = validators.ipv6.cleanIPv6Address
 
 QUnit.test('Plain address validation', 6, function() {
   ok(isValidIPv6Address('fe80::223:6cff:fe8a:2e8a'))
