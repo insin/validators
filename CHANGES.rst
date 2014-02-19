@@ -13,8 +13,8 @@
 * Added a whitelist option for EmailValidator, for specifying whitelisted
   domains.
 
-* Added a schemes option for URLValidator, which now takes a onfiguration object
-  argument.
+* Added a schemes option for URLValidator, which now takes a configuration
+  object argument.
 
 0.0.3 / 2012-06-29
 ==================
