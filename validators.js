@@ -1,43 +1,161 @@
 /**
- * validators 0.1.0 - https://github.com/insin/validators
+ * validators 0.2.0 - https://github.com/insin/validators
  * MIT Licensed
  */
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 'use strict';
 
 var Concur = require('Concur')
+  , format = require('isomorph/format').formatObj
   , is = require('isomorph/is')
   , object = require('isomorph/object')
 
+var NON_FIELD_ERRORS = '__all__'
+
 /**
- * A validation error, containing a list of messages. Single messages
- * (e.g. those produced by validators may have an associated error code
- * and parameters to allow customisation by fields.
+ * A validation error, containing a list of messages. Single messages (e.g.
+ * those produced by validators) may have an associated error code and
+ * parameters to allow customisation by fields.
+ *
+ * The message argument can be a single error, a list of errors, or an object
+ * that maps field names to lists of errors. What we define as an "error" can
+ * be either a simple string or an instance of ValidationError with its message
+ * attribute set, and what we define as list or object can be an actual list or
+ * object or an instance of ValidationError with its errorList or errorObj
+ * property set.
  */
 var ValidationError = Concur.extend({
-  constructor: function(message, kwargs) {
+  constructor: function ValidationError(message, kwargs) {
     if (!(this instanceof ValidationError)) { return new ValidationError(message, kwargs) }
     kwargs = object.extend({code: null, params: null}, kwargs)
-    if (is.Array(message)) {
-      this.messages = message
+
+    var code = kwargs.code
+    var params = kwargs.params
+
+    if (message instanceof ValidationError) {
+      if (object.hasOwn(message, 'errorObj')) {
+        message = message.errorObj
+      }
+      else if (object.hasOwn(message, 'message')) {
+        message = message.errorList
+      }
+      else {
+        code = message.code
+        params = message.params
+        message = message.message
+      }
+    }
+
+    if (is.Object(message)) {
+      this.errorObj = {}
+      Object.keys(message).forEach(function(field) {
+        var messages = message[field]
+        if (!(messages instanceof ValidationError)) {
+          messages = ValidationError(messages)
+        }
+        this.errorObj[field] = messages.errorList
+      }.bind(this))
+    }
+    else if (is.Array(message)) {
+      this.errorList = []
+      message.forEach(function(message) {
+        // Normalize strings to instances of ValidationError
+        if (!(message instanceof ValidationError)) {
+          message = ValidationError(message)
+        }
+        this.errorList.push.apply(this.errorList, message.errorList)
+      }.bind(this))
     }
     else {
-      this.code = kwargs.code
-      this.params = kwargs.params
-      this.messages = [message]
+      this.message = message
+      this.code = code
+      this.params = params
+      this.errorList = [this]
     }
   }
 })
 
+/**
+ * Returns validation messages as object with field names as properties.
+ * Throws an error if this validation error was not created with a field error
+ * object.
+ */
+ValidationError.prototype.messageObj = function() {
+  if (!object.hasOwn(this, 'errorObj')) {
+    throw new Error('ValidationError has no errorObj')
+  }
+  var messageObj = {}
+  Object.keys(this.errorObj).forEach(function(field) {
+    var errors = this.errorObj[field]
+    messageObj[field] = ValidationError(errors).messages()
+  }.bind(this))
+  return messageObj
+}
+
+/**
+ * Returns validation messages as a list.
+ */
+ValidationError.prototype.messages = function() {
+  if (object.hasOwn(this, 'errorObj')) {
+    var messages = []
+    Object.keys(this.errorObj).forEach(function(field) {
+      var errors = this.errorObj[field]
+      messages.push.apply(messages, ValidationError(errors).messages())
+    }.bind(this))
+    return messages
+  }
+  else {
+    return this.errorList.map(function(error) {
+      var message = error.message
+      if (error.params) {
+        message = format(message, error.params)
+      }
+      return message
+    })
+  }
+}
+
+/**
+ * Passes this error's messages on to the given error object, adding to a
+ * particular field's error messages if already present.
+ */
+ValidationError.prototype.updateErrorObj = function(errorObj) {
+  if (object.hasOwn(this, 'errorObj')) {
+    if (errorObj) {
+      Object.keys(this.errorObj).forEach(function(field) {
+        if (!object.hasOwn(errorObj, field)) {
+          errorObj[field] = []
+        }
+        var errors = errorObj[field]
+        errors.push.apply(errors, this.errorObj[field])
+      }.bind(this))
+    }
+    else {
+      errorObj = this.errorObj
+    }
+  }
+  else {
+    if (!object.hasOwn(errorObj, NON_FIELD_ERRORS)) {
+      errorObj[NON_FIELD_ERRORS] = []
+    }
+    var nonFieldErrors = errorObj[NON_FIELD_ERRORS]
+    nonFieldErrors.push.apply(nonFieldErrors, this.errorList)
+  }
+  return errorObj
+}
+
 ValidationError.prototype.toString = function() {
-  return ('ValidationError: ' + this.messages.join('; '))
+  var messages = (object.hasOwn(this, 'errorObj')
+                  ? this.messageObj()
+                  : this.messages())
+  return ('ValidationError(' + JSON.stringify(messages) + ')')
 }
 
 module.exports = {
   ValidationError: ValidationError
 }
 
-},{"Concur":4,"isomorph/is":7,"isomorph/object":8}],2:[function(require,module,exports){
+},{"Concur":4,"isomorph/format":6,"isomorph/is":7,"isomorph/object":8}],2:[function(require,module,exports){
 'use strict';
 
 var object = require('isomorph/object')
@@ -326,7 +444,6 @@ module.exports = {
 
 var Concur = require('Concur')
   , is = require('isomorph/is')
-  , format = require('isomorph/format').formatObj
   , object = require('isomorph/object')
   , punycode = require('punycode')
   , url = require('isomorph/url')
@@ -606,10 +723,9 @@ var BaseValidator = Concur.extend({
 , code: 'limitValue'
 , __call__: function(value) {
     var cleaned = this.clean(value)
-      , params = {limitValue: this.limitValue, showValue: cleaned}
+    var params = {limitValue: this.limitValue, showValue: cleaned}
     if (this.compare(cleaned, this.limitValue)) {
-      throw ValidationError(format(this.message, params),
-                            {code: this.code, params: params})
+      throw ValidationError(this.message, {code: this.code, params: params})
     }
   }
 })
@@ -692,7 +808,7 @@ module.exports = {
 , ipv6: ipv6
 }
 
-},{"./errors":1,"./ipv6":2,"Concur":4,"isomorph/format":6,"isomorph/is":7,"isomorph/object":8,"isomorph/url":9,"punycode":5}],4:[function(require,module,exports){
+},{"./errors":1,"./ipv6":2,"Concur":4,"isomorph/is":7,"isomorph/object":8,"isomorph/url":9,"punycode":5}],4:[function(require,module,exports){
 var is = require('isomorph/is')
   , object = require('isomorph/object')
 

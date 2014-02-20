@@ -4,7 +4,8 @@ var qqunit = require('qqunit')
 
 global.validators = require('../lib/validators')
 
-var tests = [ 'ipv6.js'
+var tests = [ 'errors.js'
+            , 'ipv6.js'
             , 'validators.js'
             ].map(function(t) { return path.join(__dirname, t) })
 

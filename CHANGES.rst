@@ -1,3 +1,18 @@
+0.2.0 / 2014-02-20
+==================
+
+* **Backwards-incompatible change** -- ValidationError messages are now accessed
+  using a .messages() method rather than a .messages property.
+
+* ValidationErrors can now be created with an object containing field-specific
+  error messages.
+
+* Added an ``updateErrorObj(errorObj)`` method to ValidationError which passes
+  its error messags along to the given object.
+
+* ValidationErrors now formats messages with any configured parameters when
+  returning messages.
+
 0.1.0 / 2014-02-19
 ==================
 
