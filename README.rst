@@ -37,6 +37,13 @@ For customisation purposes, in addition to a validation message, a
 ``ValidationError`` may specify a ``code`` to itentify the category of error and
 any ``params`` which were inserted into the validation message, when applicable.
 
+For ``messages``, you can pass:
+
+* a single message as a String
+* a list of messages
+* an object containing field-specific messages, with properties corresponding to
+  field names.
+
 Utilities
 =========
 
