@@ -1,5 +1,5 @@
 /**
- * validators 0.2.0 - https://github.com/insin/validators
+ * validators 0.2.1 - https://github.com/insin/validators
  * MIT Licensed
  */
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
@@ -76,7 +76,7 @@ var ValidationError = Concur.extend({
 })
 
 /**
- * Returns validation messages as object with field names as properties.
+ * Returns validation messages as an object with field names as properties.
  * Throws an error if this validation error was not created with a field error
  * object.
  */
@@ -84,12 +84,7 @@ ValidationError.prototype.messageObj = function() {
   if (!object.hasOwn(this, 'errorObj')) {
     throw new Error('ValidationError has no errorObj')
   }
-  var messageObj = {}
-  Object.keys(this.errorObj).forEach(function(field) {
-    var errors = this.errorObj[field]
-    messageObj[field] = ValidationError(errors).messages()
-  }.bind(this))
-  return messageObj
+  return this.__iter__()
 }
 
 /**
@@ -100,9 +95,27 @@ ValidationError.prototype.messages = function() {
     var messages = []
     Object.keys(this.errorObj).forEach(function(field) {
       var errors = this.errorObj[field]
-      messages.push.apply(messages, ValidationError(errors).messages())
+      messages.push.apply(messages, ValidationError(errors).__iter__())
     }.bind(this))
     return messages
+  }
+  else {
+    return this.__iter__()
+  }
+}
+
+/**
+ * Generates an object of field error messags or a list of error messages
+ * depending on how this ValidationError has been constructed.
+ */
+ValidationError.prototype.__iter__ = function() {
+  if (object.hasOwn(this, 'errorObj')) {
+    var messageObj = {}
+    Object.keys(this.errorObj).forEach(function(field) {
+      var errors = this.errorObj[field]
+      messageObj[field] = ValidationError(errors).__iter__()
+    }.bind(this))
+    return messageObj
   }
   else {
     return this.errorList.map(function(error) {
@@ -145,10 +158,7 @@ ValidationError.prototype.updateErrorObj = function(errorObj) {
 }
 
 ValidationError.prototype.toString = function() {
-  var messages = (object.hasOwn(this, 'errorObj')
-                  ? this.messageObj()
-                  : this.messages())
-  return ('ValidationError(' + JSON.stringify(messages) + ')')
+  return ('ValidationError(' + JSON.stringify(this.__iter__()) + ')')
 }
 
 module.exports = {
@@ -641,7 +651,7 @@ var EmailValidator = Concur.extend({
 
 var validateEmail = EmailValidator()
 
-var SLUG_RE = /^[-\w]+$/
+var SLUG_RE = /^[-a-zA-Z0-9_]+$/
 /** Validates that input is a valid slug. */
 var validateSlug = RegexValidator({
   regex: SLUG_RE
