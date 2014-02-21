@@ -1,14 +1,22 @@
+0.2.1 / 2014-02-21
+==================
+
+* Fixed slug validation ``RegExp``.
+
+* Moved conditional output of ValidationError messages as an error object or
+  list into ``ValidationError#__iter__()``.
+
 0.2.0 / 2014-02-20
 ==================
 
 * **Backwards-incompatible change** -- ValidationError messages are now accessed
-  using a .messages() method rather than a .messages property.
+  using a ``#messages()`` function rather than a ``messages`` property.
 
 * ValidationErrors can now be created with an object containing field-specific
   error messages.
 
-* Added an ``updateErrorObj(errorObj)`` method to ValidationError which passes
-  its error messags along to the given object.
+* Added an ``#updateErrorObj(errorObj)`` function to ValidationError which
+  passes its error messags along to the given object.
 
 * ValidationErrors now formats messages with any configured parameters when
   returning messages.
