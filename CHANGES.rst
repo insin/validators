@@ -1,3 +1,9 @@
+0.2.2 / 2014-02-23
+==================
+
+* Made ``validateIPv46Address()`` throw a ValidationError with its own message
+  when IPv6 validation fails.
+
 0.2.1 / 2014-02-21
 ==================
 

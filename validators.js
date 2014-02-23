@@ -1,14 +1,14 @@
 /**
- * validators 0.2.1 - https://github.com/insin/validators
+ * validators 0.2.2 - https://github.com/insin/validators
  * MIT Licensed
  */
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 'use strict';
 
 var Concur = require('Concur')
-  , format = require('isomorph/format').formatObj
-  , is = require('isomorph/is')
-  , object = require('isomorph/object')
+var format = require('isomorph/format').formatObj
+var is = require('isomorph/is')
+var object = require('isomorph/object')
 
 var NON_FIELD_ERRORS = '__all__'
 
@@ -179,8 +179,8 @@ var hexRE = /^[0-9a-f]+$/
 /**
  * Cleans a IPv6 address string.
  *
- *  Validity is checked by calling isValidIPv6Address() - if an invalid address
- *  is passed, a ValidationError is thrown.
+ * Validity is checked by calling isValidIPv6Address() - if an invalid address
+ * is passed, a ValidationError is thrown.
  *
  * Replaces the longest continious zero-sequence with '::' and removes leading
  * zeroes and makes sure all hextets are lowercase.
@@ -191,12 +191,12 @@ function cleanIPv6Address(ipStr, kwargs) {
   }, kwargs)
 
   var bestDoublecolonStart = -1
-    , bestDoublecolonLen = 0
-    , doublecolonStart = -1
-    , doublecolonLen = 0
+  var bestDoublecolonLen = 0
+  var doublecolonStart = -1
+  var doublecolonLen = 0
 
   if (!isValidIPv6Address(ipStr)) {
-    throw ValidationError(kwargs.errorMessage)
+    throw ValidationError(kwargs.errorMessage, {code: 'invalid'})
   }
 
   // This algorithm can only handle fully exploded IP strings
@@ -388,7 +388,7 @@ function _explodeShorthandIPstring(ipStr) {
   }
 
   var newIp = []
-    , hextets = ipStr.split('::')
+  var hextets = ipStr.split('::')
 
   // If there is a ::, we need to expand it with zeroes to get to 8 hextets -
   // unless there is a dot in the last hextet, meaning we're doing v4-mapping
@@ -453,16 +453,16 @@ module.exports = {
 'use strict';
 
 var Concur = require('Concur')
-  , is = require('isomorph/is')
-  , object = require('isomorph/object')
-  , punycode = require('punycode')
-  , url = require('isomorph/url')
+var is = require('isomorph/is')
+var object = require('isomorph/object')
+var punycode = require('punycode')
+var url = require('isomorph/url')
 
 var errors = require('./errors')
-  , ipv6 = require('./ipv6')
+var ipv6 = require('./ipv6')
 
 var ValidationError = errors.ValidationError
-  , isValidIPv6Address = ipv6.isValidIPv6Address
+var isValidIPv6Address = ipv6.isValidIPv6Address
 
 var EMPTY_VALUES = [null, undefined, '']
 
@@ -510,7 +510,7 @@ var RegexValidator = Concur.extend({
       this.regex = kwargs.regex
     }
     if (kwargs.message) {
-      this.message =kwargs.message
+      this.message = kwargs.message
     }
     if (kwargs.code) {
       this.code = kwargs.code
@@ -680,12 +680,14 @@ function validateIPv46Address(value) {
     validateIPv4Address.__call__(value)
   }
   catch (e) {
-    if (!(e instanceof ValidationError)) {
-      throw e
+    if (!(e instanceof ValidationError)) { throw e }
+    try {
+      validateIPv6Address(value)
     }
-
-    if (!isValidIPv6Address(value)) {
-      throw ValidationError('Enter a valid IPv4 or IPv6 address.', {code: 'invalid'})
+    catch (e) {
+      if (!(e instanceof ValidationError)) { throw e }
+      throw ValidationError('Enter a valid IPv4 or IPv6 address.',
+                            {code: 'invalid'})
     }
   }
 }
