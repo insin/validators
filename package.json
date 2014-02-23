@@ -1,7 +1,7 @@
 {
   "name": "validators",
   "description": "Reusable validators for browsers and Node.js",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": "Jonathan Buchanan <jonathan.buchanan@gmail.com> (https://github.com/insin)",
   "tags": [
     "isomorphic",

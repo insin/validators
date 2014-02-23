@@ -1,3 +1,9 @@
+0.2.3 / 2014-02-23
+==================
+
+* The default error message in ``cleanIPv6Address()`` was missing a full stop at
+  the end.
+
 0.2.2 / 2014-02-23
 ==================
 
