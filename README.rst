@@ -13,7 +13,7 @@ they detect that it is invalid.
 
 Browsers:
 
-* `validators.js`_
+* `validators.js`_ / `validators.min.js`_
 
 Node.js::
 
@@ -22,6 +22,7 @@ Node.js::
 .. _`Node.js`: http://nodejs.org/
 .. _`Django`: https://www.djangoproject.com/
 .. _`validators.js`: https://raw.github.com/insin/validators/master/validators.js
+.. _`validators.min.js`: https://raw.github.com/insin/validators/master/validators.min.js
 
 Error
 =====
