@@ -1,3 +1,12 @@
+0.3.0 / 2014-02-26
+==================
+
+* Constructors of validators implemented as instances with a ``__call__()``
+  function in their prototype now return ``__call__()`` bound to the instance.
+  This gets rid of the ``isCallable()`` / ``callValidator()`` machinery.
+
+* Removed ``isEmptyValue()`` -- just use ``Array.prototype.indexOf()``
+
 0.2.3 / 2014-02-23
 ==================
 

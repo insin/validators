@@ -1,5 +1,5 @@
 /**
- * validators 0.2.3 - https://github.com/insin/validators
+ * validators 0.3.0 - https://github.com/insin/validators
  * MIT Licensed
  */
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
@@ -355,7 +355,7 @@ function isValidIPv6Address(ipStr) {
         return false
       }
       try {
-        validateIPv4Address.__call__(hextet)
+        validateIPv4Address(hextet)
       }
       catch (e) {
         if (!(e instanceof ValidationError)) {
@@ -466,32 +466,6 @@ var isValidIPv6Address = ipv6.isValidIPv6Address
 
 var EMPTY_VALUES = [null, undefined, '']
 
-var isEmptyValue = function(value) {
-  for (var i = 0, l = EMPTY_VALUES.length; i < l; i++) {
-    if (value === EMPTY_VALUES[i]) {
-      return true
-    }
-  }
-  return false
-}
-
-function isCallable(o) {
-  return (is.Function(o) || is.Function(o.__call__))
-}
-
-/**
- * Calls a validator, which may be a function or an objects with a
- * __call__ method, with the given value.
- */
-function callValidator(v, value) {
-  if (is.Function(v)) {
-    v(value)
-  }
-  else if (is.Function(v.__call__)) {
-    v.__call__(value)
-  }
-}
-
 function String_rsplit(str, sep, maxsplit) {
   var split = str.split(sep)
   return maxsplit ? [split.slice(0, -maxsplit).join(sep)].concat(split.slice(-maxsplit)) : split
@@ -522,6 +496,7 @@ var RegexValidator = Concur.extend({
     if (is.String(this.regex)) {
       this.regex = new RegExp(this.regex)
     }
+    return this.__call__.bind(this)
   }
 , regex: ''
 , message: 'Enter a valid value.'
@@ -558,6 +533,7 @@ var URLValidator = RegexValidator.extend({
     if (kwargs.schemes !== null) {
       this.schemes = kwargs.schemes
     }
+    return this.__call__.bind(this)
   }
 
 , __call__: function(value) {
@@ -615,6 +591,7 @@ var EmailValidator = Concur.extend({
     if (kwargs.whitelist !== null) {
       this.domainWhitelist = kwargs.whitelist
     }
+    return this.__call__.bind(this)
   }
 
 , __call__ : function(value) {
@@ -677,7 +654,7 @@ function validateIPv6Address(value) {
 /** Validates that input is a valid IPv4 or IPv6 address. */
 function validateIPv46Address(value) {
   try {
-    validateIPv4Address.__call__(value)
+    validateIPv4Address(value)
   }
   catch (e) {
     if (!(e instanceof ValidationError)) { throw e }
@@ -728,6 +705,7 @@ var BaseValidator = Concur.extend({
   constructor: function(limitValue) {
     if (!(this instanceof BaseValidator)) { return new BaseValidator(limitValue) }
     this.limitValue = limitValue
+    return this.__call__.bind(this)
   }
 , compare: function(a, b) { return a !== b }
 , clean: function(x) { return x }
@@ -748,7 +726,7 @@ var BaseValidator = Concur.extend({
 var MaxValueValidator = BaseValidator.extend({
   constructor: function(limitValue) {
     if (!(this instanceof MaxValueValidator)) { return new MaxValueValidator(limitValue) }
-    BaseValidator.call(this, limitValue)
+    return BaseValidator.call(this, limitValue)
   }
 , compare: function(a, b) { return a > b }
 , message: 'Ensure this value is less than or equal to {limitValue}.'
@@ -761,7 +739,7 @@ var MaxValueValidator = BaseValidator.extend({
 var MinValueValidator = BaseValidator.extend({
   constructor: function(limitValue) {
     if (!(this instanceof MinValueValidator)) { return new MinValueValidator(limitValue) }
-    BaseValidator.call(this, limitValue)
+    return BaseValidator.call(this, limitValue)
   }
 , compare: function(a, b) { return a < b }
 , message: 'Ensure this value is greater than or equal to {limitValue}.'
@@ -774,7 +752,7 @@ var MinValueValidator = BaseValidator.extend({
 var MinLengthValidator = BaseValidator.extend({
   constructor: function(limitValue) {
     if (!(this instanceof MinLengthValidator)) { return new MinLengthValidator(limitValue) }
-    BaseValidator.call(this, limitValue)
+    return BaseValidator.call(this, limitValue)
   }
 , compare: function(a, b) { return a < b }
 , clean: function(x) { return x.length }
@@ -788,7 +766,7 @@ var MinLengthValidator = BaseValidator.extend({
 var MaxLengthValidator = BaseValidator.extend({
   constructor: function(limitValue) {
     if (!(this instanceof MaxLengthValidator)) { return new MaxLengthValidator(limitValue) }
-    BaseValidator.call(this, limitValue)
+    return BaseValidator.call(this, limitValue)
   }
 , compare: function(a, b) { return a > b }
 , clean: function(x) { return x.length }
@@ -798,9 +776,6 @@ var MaxLengthValidator = BaseValidator.extend({
 
 module.exports = {
   EMPTY_VALUES: EMPTY_VALUES
-, isEmptyValue: isEmptyValue
-, isCallable: isCallable
-, callValidator: callValidator
 , RegexValidator: RegexValidator
 , URLValidator: URLValidator
 , EmailValidator: EmailValidator

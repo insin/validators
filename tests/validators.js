@@ -166,13 +166,16 @@ QUnit.test("validators", 131, function() {
   ]
 
   for (var i =0, l = tests.length; i < l; i++) {
-    var a = tests[i]
-    if (a[2] === null) {
-      validators.callValidator(a[0], a[1])
-      ok(true, "valid value '" + a[1] + "' shouldn't throw")
+    var t = tests[i]
+    var validator = t[0]
+    var value = t[1]
+    var error = t[2]
+    if (error === null) {
+      validator(value)
+      ok(true, "valid value '" + value + "' shouldn't throw")
     }
     else {
-      throws(function() { validators.callValidator(a[0], a[1]); }, "invalid value '" + a[1] + "' should throw")
+      throws(function() { validator(value) }, "invalid value '" + value + "' should throw")
     }
   }
 })

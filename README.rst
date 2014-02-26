@@ -5,14 +5,11 @@ Validators |travis_status|
 .. |travis_status| image:: https://secure.travis-ci.org/insin/validators.png
    :target: http://travis-ci.org/insin/validators
 
-Validators which can be shared between browsers and `Node.js`_, based on Django's
-core validators.
+Validators which can be shared between browsers and `Node.js`_, based on
+`Django`_'s core validators.
 
-Validators are either Functions or Objects with a ``__call__()`` function, which
-take a value and throw a ``ValidationError`` if they detect that it is invalid.
-
-The ``__call__()`` form is a workaround for the fact that only Function objects
-are callable in JavaScript.
+Validators are Functions which take a value and throw a ``ValidationError`` if
+they detect that it is invalid.
 
 Browsers:
 
@@ -22,7 +19,8 @@ Node.js::
 
    npm install validators
 
-.. _`Node.js`: http://nodejs.org
+.. _`Node.js`: http://nodejs.org/
+.. _`Django`: https://www.djangoproject.com/
 .. _`validators.js`: https://raw.github.com/insin/validators/master/validators.js
 
 Error
@@ -55,25 +53,6 @@ Defines input values for which a field is considered to be empty. These are:
 * ``null``
 * ``undefined``
 * ``''``
-
-``isEmptyValue(value)``
------------------------
-
-Convenience function for checking if a value is strictly one of
-``EMPTY_VALUES``.
-
-``isCallable(obj)``
--------------------
-
-Returns ``true`` if the given object is a Function or an Object with a
-``__call__()`` Function.
-
-``callValidator(validator, value)``
------------------------------------
-
-Calls a validator with a value - this utility function is provided to ensure
-code which needs to work with validators doesn't need to care how they're
-defined.
 
 Validators
 ==========

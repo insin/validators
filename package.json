@@ -1,11 +1,12 @@
 {
   "name": "validators",
-  "description": "Reusable validators for browsers and Node.js",
-  "version": "0.2.3",
+  "description": "Validators for browsers and Node.js",
+  "version": "0.3.0",
   "author": "Jonathan Buchanan <jonathan.buchanan@gmail.com> (https://github.com/insin)",
   "tags": [
     "isomorphic",
     "validation",
+    "validators",
     "ipv6"
   ],
   "main": "./lib/validators",
