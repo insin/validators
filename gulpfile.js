@@ -1,11 +1,12 @@
+var browserify = require('browserify')
 var gulp = require('gulp')
+var source = require('vinyl-source-stream')
 
-var browserify = require('gulp-browserify')
-var concat = require('gulp-concat')
 var header = require('gulp-header')
 var jshint = require('gulp-jshint')
 var plumber = require('gulp-plumber')
 var rename = require('gulp-rename')
+var streamify = require('gulp-streamify')
 var uglify = require('gulp-uglify')
 var gutil = require('gulp-util')
 
@@ -18,6 +19,7 @@ var srcHeader = '/**\n\
 var jsPath = './lib/*.js'
 var jsEntryPoint = './lib/validators.js'
 var standalone = 'validators'
+var distDir = './'
 var distFile = 'validators.js'
 var minDistFile = 'validators.min.js'
 
@@ -29,25 +31,25 @@ gulp.task('lint', function() {
 })
 
 gulp.task('build-js', ['lint'], function(){
-  var stream = gulp.src(jsEntryPoint, {read: false})
-    .pipe(plumber())
-    .pipe(browserify({
-      debug: !gutil.env.production
-    , standalone: standalone
-    }))
+  var b = browserify(jsEntryPoint, {
+    debug: !gutil.env.production
+  , standalone: standalone
+  })
+
+  var stream = b.bundle()
     .on('error', function(e) {
       console.error(e)
     })
-    .pipe(concat(distFile))
-    .pipe(header(srcHeader, {pkg: pkg}))
-    .pipe(gulp.dest('./'))
+    .pipe(source(distFile))
+    .pipe(streamify(header(srcHeader, {pkg: pkg})))
+    .pipe(gulp.dest(distDir))
 
   if (gutil.env.production) {
     stream = stream
       .pipe(rename(minDistFile))
-      .pipe(uglify())
-      .pipe(header(srcHeader, {pkg: pkg}))
-      .pipe(gulp.dest('./'))
+      .pipe(streamify(uglify()))
+      .pipe(streamify(header(srcHeader, {pkg: pkg})))
+      .pipe(gulp.dest(distDir))
   }
 
   return stream
@@ -57,6 +59,4 @@ gulp.task('watch', function() {
   gulp.watch(jsPath, ['build-js'])
 })
 
-gulp.task('default', function() {
-  gulp.start('build-js', 'watch')
-})
+gulp.task('default', ['build-js', 'watch'])
