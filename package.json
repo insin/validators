@@ -1,7 +1,7 @@
 {
   "name": "validators",
   "description": "Validators for browsers and Node.js",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Jonathan Buchanan <jonathan.buchanan@gmail.com> (https://github.com/insin)",
   "tags": [
     "isomorphic",
@@ -9,7 +9,7 @@
     "validators",
     "ipv6"
   ],
-  "main": "./lib/validators",
+  "main": "./lib/index.js",
   "repository": {
     "type": "git",
     "url": "http://github.com/insin/validators.git"

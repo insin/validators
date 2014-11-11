@@ -17,7 +17,7 @@ var srcHeader = '/**\n\
  */\n'
 
 var jsPath = './lib/*.js'
-var jsEntryPoint = './lib/validators.js'
+var jsEntryPoint = './lib/index.js'
 var standalone = 'validators'
 var distDir = './'
 var distFile = 'validators.js'

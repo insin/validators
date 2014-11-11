@@ -1,8 +1,14 @@
 /**
- * validators 0.3.0 - https://github.com/insin/validators
+ * validators 0.3.1 - https://github.com/insin/validators
  * MIT Licensed
  */
-!function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.validators=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+'use strict';
+
+// HACK: requiring './validators' here makes the circular import in ipv6.js work
+//       after browserification.
+module.exports = require('./validators')
+},{"./validators":4}],2:[function(require,module,exports){
 'use strict';
 
 var Concur = require('Concur')
@@ -165,7 +171,7 @@ module.exports = {
   ValidationError: ValidationError
 }
 
-},{"Concur":4,"isomorph/format":6,"isomorph/is":7,"isomorph/object":8}],2:[function(require,module,exports){
+},{"Concur":5,"isomorph/format":7,"isomorph/is":8,"isomorph/object":9}],3:[function(require,module,exports){
 'use strict';
 
 var object = require('isomorph/object')
@@ -449,7 +455,7 @@ module.exports = {
 , isValidIPv6Address: isValidIPv6Address
 }
 
-},{"./errors":1,"./validators":3,"isomorph/object":8}],3:[function(require,module,exports){
+},{"./errors":2,"./validators":4,"isomorph/object":9}],4:[function(require,module,exports){
 'use strict';
 
 var Concur = require('Concur')
@@ -795,38 +801,61 @@ module.exports = {
 , ipv6: ipv6
 }
 
-},{"./errors":1,"./ipv6":2,"Concur":4,"isomorph/is":7,"isomorph/object":8,"isomorph/url":9,"punycode":5}],4:[function(require,module,exports){
-var is = require('isomorph/is')
-  , object = require('isomorph/object')
+},{"./errors":2,"./ipv6":3,"Concur":5,"isomorph/is":8,"isomorph/object":9,"isomorph/url":10,"punycode":6}],5:[function(require,module,exports){
+'use strict';
+
+var hasOwn = Object.prototype.hasOwnProperty
+var toString = Object.prototype.toString
+
+function type(obj) {
+  return toString.call(obj).slice(8, -1).toLowerCase()
+}
+
+function inherits(childConstructor, parentConstructor) {
+  var F = function() {}
+  F.prototype = parentConstructor.prototype
+  childConstructor.prototype = new F()
+  childConstructor.prototype.constructor = childConstructor
+  return childConstructor
+}
+
+function extend(dest, src) {
+  for (var prop in src) {
+    if (hasOwn.call(src, prop)) {
+      dest[prop] = src[prop]
+    }
+  }
+  return dest
+}
 
 /**
  * Mixes in properties from one object to another. If the source object is a
  * Function, its prototype is mixed in instead.
  */
 function mixin(dest, src) {
-  if (is.Function(src)) {
-    object.extend(dest, src.prototype)
+  if (type(src) == 'function') {
+    extend(dest, src.prototype)
   }
   else {
-    object.extend(dest, src)
+    extend(dest, src)
   }
 }
 
 /**
- * Applies mixins specified as a __mixin__ property on the given properties
+ * Applies mixins specified as a __mixins__ property on the given properties
  * object, returning an object containing the mixed in properties.
  */
 function applyMixins(properties) {
-  var mixins = properties.__mixin__
-  if (!is.Array(mixins)) {
+  var mixins = properties.__mixins__
+  if (type(mixins) != 'array') {
     mixins = [mixins]
   }
   var mixedProperties = {}
   for (var i = 0, l = mixins.length; i < l; i++) {
     mixin(mixedProperties, mixins[i])
   }
-  delete properties.__mixin__
-  return object.extend(mixedProperties, properties)
+  delete properties.__mixins__
+  return extend(mixedProperties, properties)
 }
 
 /**
@@ -836,34 +865,32 @@ function applyMixins(properties) {
  * If a child constructor is not provided via prototypeProps.constructor,
  * a new constructor will be created.
  */
-function inheritFrom(parentConstructor, prototypeProps, constructorProps) {
-  // Get or create a child constructor
-  var childConstructor
-  if (prototypeProps && object.hasOwn(prototypeProps, 'constructor')) {
-    childConstructor = prototypeProps.constructor
-  }
-  else {
+function inheritFrom(parentConstructor, childConstructor, prototypeProps, constructorProps) {
+  // Create a child constructor if one wasn't given
+  if (childConstructor == null) {
     childConstructor = function() {
       parentConstructor.apply(this, arguments)
     }
   }
 
+  // Make sure the new prototype has the correct constructor set up
+  prototypeProps.constructor = childConstructor
+
   // Base constructors should only have the properties they're defined with
   if (parentConstructor !== Concur) {
     // Inherit the parent's prototype
-    object.inherits(childConstructor, parentConstructor)
+    inherits(childConstructor, parentConstructor)
     childConstructor.__super__ = parentConstructor.prototype
   }
 
-  // Add prototype properties, if given
-  if (prototypeProps) {
-    object.extend(childConstructor.prototype, prototypeProps)
-  }
+  // Add prototype properties - this is why we took a copy of the child
+  // constructor reference in extend() - if a .constructor had been passed as a
+  // __mixins__ and overitten prototypeProps.constructor, these properties would
+  // be getting set on the mixed-in constructor's prototype.
+  extend(childConstructor.prototype, prototypeProps)
 
-  // Add constructor properties, if given
-  if (constructorProps) {
-    object.extend(childConstructor, constructorProps)
-  }
+  // Add constructor properties
+  extend(childConstructor, constructorProps)
 
   return childConstructor
 }
@@ -874,39 +901,60 @@ function inheritFrom(parentConstructor, prototypeProps, constructorProps) {
 var Concur = module.exports = function() {}
 
 /**
+ * Details of a constructor's inheritance chain - Concur just facilitates sugar
+ * so we don't include it in the initial chain. Arguably, Object.prototype could
+ * go here, but it's just not that interesting.
+ */
+Concur.__mro__ = []
+
+/**
  * Creates or uses a child constructor to inherit from the the call
  * context, which is expected to be a constructor.
  */
 Concur.extend = function(prototypeProps, constructorProps) {
+  // Ensure we have prop objects to work with
+  prototypeProps = prototypeProps || {}
+  constructorProps = constructorProps || {}
+
   // If the constructor being inherited from has a __meta__ function somewhere
   // in its prototype chain, call it to customise prototype and constructor
   // properties before they're used to set up the new constructor's prototype.
   if (typeof this.prototype.__meta__ != 'undefined') {
-    // Property objects must always exist so properties can be added to
-    // and removed from them.
-    prototypeProps = prototypeProps || {}
-    constructorProps = constructorProps || {}
     this.prototype.__meta__(prototypeProps, constructorProps)
   }
 
+  // Any child constructor passed in should take precedence - grab a reference
+  // to it befoer we apply any mixins.
+  var childConstructor = (hasOwn.call(prototypeProps, 'constructor')
+                          ? prototypeProps.constructor
+                          : null)
+
   // If any mixins are specified, mix them into the property objects
-  if (prototypeProps && object.hasOwn(prototypeProps, '__mixin__')) {
+  if (hasOwn.call(prototypeProps, '__mixins__')) {
     prototypeProps = applyMixins(prototypeProps)
   }
-  if (constructorProps && object.hasOwn(constructorProps, '__mixin__')) {
+  if (hasOwn.call(constructorProps, '__mixins__')) {
     constructorProps = applyMixins(constructorProps)
   }
 
-  // Set up and return the new child constructor
-  var childConstructor = inheritFrom(this,
-                                     prototypeProps,
-                                     constructorProps)
+  // Set up the new child constructor and its prototype
+  childConstructor = inheritFrom(this,
+                                 childConstructor,
+                                 prototypeProps,
+                                 constructorProps)
+
+  // Pass on the extend function for extension in turn
   childConstructor.extend = this.extend
+
+  // Expose the inheritance chain for programmatic access
+  childConstructor.__mro__ = [childConstructor].concat(this.__mro__)
+
   return childConstructor
 }
 
-},{"isomorph/is":7,"isomorph/object":8}],5:[function(require,module,exports){
-var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};/*! http://mths.be/punycode v1.2.4 by @mathias */
+},{}],6:[function(require,module,exports){
+(function (global){
+/*! http://mths.be/punycode v1.2.4 by @mathias */
 ;(function(root) {
 
 	/** Detect free variables */
@@ -1414,9 +1462,11 @@ var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? 
 
 }(this));
 
-},{}],6:[function(require,module,exports){
-var is = require('./is')
-  , slice = Array.prototype.slice
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],7:[function(require,module,exports){
+'use strict';
+
+var slice = Array.prototype.slice
   , formatRegExp = /%[%s]/g
   , formatObjRegExp = /({{?)(\w+)}/g
 
@@ -1470,7 +1520,9 @@ module.exports = {
 , fileSize: fileSize
 }
 
-},{"./is":7}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
+'use strict';
+
 var toString = Object.prototype.toString
 
 // Type checks
@@ -1514,9 +1566,11 @@ function isString(o) {
 // Content checks
 
 function isEmpty(o) {
+  /* jshint ignore:start */
   for (var prop in o) {
     return false
   }
+  /* jshint ignore:end */
   return true
 }
 
@@ -1534,14 +1588,24 @@ module.exports = {
 , String: isString
 }
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
+'use strict';
+
 /**
- * Callbound version of Object.prototype.hasOwnProperty(), ready to be called
- * with an object and property name.
+ * Wraps Object.prototype.hasOwnProperty() so it can be called with an object
+ * and property name.
  */
 var hasOwn = (function() {
   var hasOwnProperty = Object.prototype.hasOwnProperty
   return function(obj, prop) { return hasOwnProperty.call(obj, prop) }
+})()
+
+/**
+ * Returns the type of an object as a lowercase string.
+ */
+var type = (function() {
+  var toString = Object.prototype.toString
+  return function(obj) { return toString.call(obj).slice(8, -1).toLowerCase() }
 })()
 
 /**
@@ -1577,13 +1641,13 @@ function inherits(childConstructor, parentConstructor) {
  * Creates an Array of [property, value] pairs from an Object.
  */
 function items(obj) {
-  var items = []
+  var items_ = []
   for (var prop in obj) {
     if (hasOwn(obj, prop)) {
-      items.push([prop, obj[prop]])
+      items_.push([prop, obj[prop]])
     }
   }
-  return items
+  return items_
 }
 
 /**
@@ -1617,17 +1681,62 @@ function get(obj, prop, defaultValue) {
   return (hasOwn(obj, prop) ? obj[prop] : defaultValue)
 }
 
+/**
+ * Deletes and returns an own property from an object, optionally returning a
+ * default value if the object didn't have theproperty.
+ * @throws if given an object which is null (or undefined), or if the property
+ *   doesn't exist and there was no defaultValue given.
+ */
+function pop(obj, prop, defaultValue) {
+  if (obj == null) {
+    throw new Error('pop was given ' + obj)
+  }
+  if (hasOwn(obj, prop)) {
+    var value = obj[prop]
+    delete obj[prop]
+    return value
+  }
+  else if (arguments.length == 2) {
+    throw new Error("pop was given an object which didn't have an own '" +
+                    prop + "' property, without a default value to return")
+  }
+  return defaultValue
+}
+
+/**
+ * If the prop is in the object, return its value. If not, set the prop to
+ * defaultValue and return defaultValue.
+ */
+function setDefault(obj, prop, defaultValue) {
+  if (obj == null) {
+    throw new Error('setDefault was given ' + obj)
+  }
+  defaultValue = defaultValue || null
+  if (hasOwn(obj, prop)) {
+    return obj[prop]
+  }
+  else {
+    obj[prop] = defaultValue
+    return defaultValue
+  }
+}
+
 module.exports = {
   hasOwn: hasOwn
+, type: type
 , extend: extend
 , inherits: inherits
 , items: items
 , fromItems: fromItems
 , lookup: lookup
 , get: get
+, pop: pop
+, setDefault: setDefault
 }
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
+'use strict';
+
 // parseUri 1.2.2
 // (c) Steven Levithan <stevenlevithan.com>
 // MIT License
@@ -1637,11 +1746,11 @@ function parseUri (str) {
     , uri = {}
     , i = 14
 
-  while (i--) uri[o.key[i]] = m[i] || ""
+  while (i--) { uri[o.key[i]] = m[i] || "" }
 
   uri[o.q.name] = {};
   uri[o.key[12]].replace(o.q.parser, function ($0, $1, $2) {
-    if ($1) uri[o.q.name][$1] = $2
+    if ($1) { uri[o.q.name][$1] = $2 }
   })
 
   return uri
@@ -1716,6 +1825,5 @@ module.exports = {
 , makeUri: makeUri
 }
 
-},{}]},{},[3])
-(3)
+},{}]},{},[1])(1)
 });
